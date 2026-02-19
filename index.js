@@ -2,6 +2,7 @@
 // import path from 'path';
 // import csvParser from 'csv-parser';
 
+import path from "path";
 import mapearCSVJSON from "./services/mapear-csv-json.js";
 
 // const csvFilePath = path.join(
@@ -42,4 +43,22 @@ import mapearCSVJSON from "./services/mapear-csv-json.js";
 
 console.log(`Tá rodando :)`);
 
-mapearCSVJSON();
+
+await mapearCSVJSON(
+  {
+    caminhoDetalhe: path.join(
+      process.cwd(),
+      "assets",
+      "arquivos_tse",
+      "detalhe_votacao_munzona_2020_PB.csv"
+    ),
+    caminhoCandidatos: path.join(
+      process.cwd(),
+      "assets",
+      "arquivos_tse",
+      "votacao_candidato_munzona_2020_PB.csv"
+    )
+  },
+  2020,
+  "PB"
+);
