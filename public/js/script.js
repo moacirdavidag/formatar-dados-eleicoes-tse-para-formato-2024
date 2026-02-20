@@ -3,7 +3,7 @@ const progressWrapper = document.querySelector(".progress");
 const progressBar = document.querySelector(".progress-bar");
 const feedback = document.getElementById("feedback");
 
-form.addEventListener("submit", async (e) => {
+form.addEventListener("submit", (e) => {
   e.preventDefault();
 
   const detalheFile = document.getElementById("detalheCSV").files[0];
@@ -25,31 +25,57 @@ form.addEventListener("submit", async (e) => {
   progressBar.textContent = "0%";
   feedback.innerHTML = "";
 
-  try {
-    const response = await fetch("/importar", {
-      method: "POST",
-      body: formData,
-    });
+  const xhr = new XMLHttpRequest();
+  let lastIndex = 0;
 
-    if (!response.ok) throw new Error("Erro no upload");
+  xhr.onreadystatechange = () => {
+    if (xhr.readyState === 3) {
+      const chunk = xhr.responseText.slice(lastIndex);
+      lastIndex = xhr.responseText.length;
 
-    const result = await response.json();
+      const lines = chunk.split("\n").filter(Boolean);
+      lines.forEach((line) => {
+        try {
+          const event = JSON.parse(line);
+          if (event.progress !== undefined) {
+            progressBar.style.width = event.progress + "%";
+            progressBar.textContent = event.progress + "%";
 
-    progressBar.style.width = "100%";
-    progressBar.textContent = "100%";
+            if (event.uf && event.cidade) {
+              feedback.innerHTML = `
+                Processando ${event.cidade} (${event.uf}) - Abrangência: ${
+                event.uf || "N/A"
+              }
+              `;
+            }
+          }
+        } catch {}
+      });
+    }
+  };
 
-    feedback.innerHTML = `
-      <div class="alert alert-success">
-        Importação finalizada! <br>
-        Ano da eleição: ${anoEleicao} <br>
-        Estados processados: ${result.estadosProcessados} <br>
-        Cidades processadas: ${result.cidadesProcessadas} <br>
-        Erros: ${result.erros.length > 0 ? result.erros.join(", ") : "Nenhum"}
-      </div>
-    `;
-  } catch (erro) {
-    progressBar.style.width = "0%";
-    progressBar.textContent = "0%";
-    feedback.innerHTML = `<div class="alert alert-danger">Erro: ${erro.message}</div>`;
-  }
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const lines = xhr.responseText.split("\n").filter(Boolean);
+      const finalEvent = JSON.parse(lines[lines.length - 1]);
+      progressBar.style.width = "100%";
+      progressBar.textContent = "100%";
+      form.reset();
+      feedback.innerHTML = `
+        <div class="alert alert-success">
+          Importação finalizada! <br>
+          Ano da eleição: ${anoEleicao} <br>
+        </div>
+      `;
+    } else {
+      feedback.innerHTML = `<div class="alert alert-danger">Erro no servidor</div>`;
+    }
+  };
+
+  xhr.onerror = () => {
+    feedback.innerHTML = `<div class="alert alert-danger">Erro de conexão</div>`;
+  };
+
+  xhr.open("POST", "/importar");
+  xhr.send(formData);
 });

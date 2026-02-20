@@ -2,18 +2,15 @@ import fs from "fs";
 import path from "path";
 import { parentPort, workerData } from "worker_threads";
 import logger from "../logger.config.js";
+import { texto } from "../shared/functions.js";
+import ESTADOS_BR from "../shared/estados_BR.js";
 
 const numero = (v) => {
   if (v === undefined || v === null || v === "") return 0;
   const n = Number(String(v).replace(",", "."));
   return Number.isNaN(n) ? 0 : n;
 };
-
-const percentual = (p, t) => {
-  if (!t || t === 0) return null;
-  return (p / t) * 100;
-};
-
+const percentual = (p, t) => (!t || t === 0 ? null : (p / t) * 100);
 const normalizarAbr = (tp) => {
   if (!tp) return null;
   const v = String(tp).toLowerCase();
@@ -22,224 +19,194 @@ const normalizarAbr = (tp) => {
   if (v === "f") return "br";
   return v;
 };
-
 const formatPct = (n) => (n === null ? null : n.toFixed(2).replace(".", ","));
 const formatPctN = (n) => (n === null ? null : String(n));
 
-const texto = (valor) => {
-  if (valor === null || valor === undefined) return null;
-  const str = String(valor).toLowerCase();
-  return str.replace(/(^|\s|-|\/)\p{L}/gu, (l) => l.toUpperCase());
-};
-
-const processar = () => {
+try {
   const { detalhe, candidatos } = workerData;
 
-  try {
-    const abrangencia = normalizarAbr(detalhe.TP_ABRANGENCIA);
-    const uf = String(detalhe.SG_UF || "").toLowerCase();
-    const cdMunicipio = detalhe.CD_MUNICIPIO;
-    const cdCargo = String(detalhe.CD_CARGO);
-    const cdEleicao = String(detalhe.CD_ELEICAO);
-    const cdEleicaoArquivo = String(detalhe.CD_ELEICAO).padStart(6, "0");
+  const uf = String(detalhe.SG_UF || "")
+    .trim()
+    .toUpperCase();
+  const nomeUF = ESTADOS_BR[uf] || null;
+  const cdMunicipio = detalhe.CD_MUNICIPIO;
 
-    const baseData = path.join(
-      process.cwd(),
-      "data",
-      `ele${detalhe.ANO_ELEICAO}`,
-      cdEleicao,
-      "dados",
-      uf
-    );
+  const abrangencia = normalizarAbr(detalhe.TP_ABRANGENCIA);
+  const cdCargo = String(detalhe.CD_CARGO);
+  const cdEleicao = String(detalhe.CD_ELEICAO);
+  const cdEleicaoArquivo = String(detalhe.CD_ELEICAO).padStart(6, "0");
 
-    fs.mkdirSync(baseData, { recursive: true });
+  const baseData = path.join(
+    process.cwd(),
+    "public",
+    `ele${detalhe.ANO_ELEICAO}`,
+    cdEleicao,
+    "dados",
+    uf.toLowerCase()
+  );
+  fs.mkdirSync(baseData, { recursive: true });
 
-    const nomeArquivo = `${uf}${cdMunicipio}-c${cdCargo}-e${cdEleicaoArquivo}-u.json`;
-    const caminhoArquivo = path.join(baseData, nomeArquivo);
+  const nomeArquivo = `${uf.toLowerCase()}${cdMunicipio}-c${cdCargo}-e${cdEleicaoArquivo}-u.json`;
+  const caminhoArquivo = path.join(baseData, nomeArquivo);
 
-    logger.info(`[Worker] Iniciando cidade`, {
-      municipio: texto(detalhe.NM_MUNICIPIO),
-      arquivo: nomeArquivo,
-    });
+  const totalAptos = numero(detalhe.QT_APTOS);
+  const comparecimento = numero(detalhe.QT_COMPARECIMENTO);
+  const abstencao =
+    numero(detalhe.QT_ABSTENCOES) || Math.max(totalAptos - comparecimento, 0);
+  const totalVotos = numero(detalhe.QT_VOTOS);
+  const votosValidos = numero(detalhe.QT_TOTAL_VOTOS_VALIDOS);
+  const votosNominais = numero(detalhe.QT_VOTOS_NOMINAIS_VALIDOS);
+  const votosLegenda = numero(detalhe.QT_VOTOS_LEG_VALIDOS);
+  const votosBrancos = numero(detalhe.QT_VOTOS_BRANCOS);
+  const votosNulos = numero(detalhe.QT_VOTOS_NULOS);
 
-    const totalAptos = numero(detalhe.QT_APTOS);
-    const comparecimento = numero(detalhe.QT_COMPARECIMENTO);
-    const abstencao =
-      numero(detalhe.QT_ABSTENCOES) || Math.max(totalAptos - comparecimento, 0);
-
-    const totalVotos = numero(detalhe.QT_VOTOS);
-    const votosValidos = numero(detalhe.QT_TOTAL_VOTOS_VALIDOS);
-    const votosNominais = numero(detalhe.QT_VOTOS_NOMINAIS_VALIDOS);
-    const votosLegenda = numero(detalhe.QT_VOTOS_LEG_VALIDOS);
-    const votosBrancos = numero(detalhe.QT_VOTOS_BRANCOS);
-    const votosNulos = numero(detalhe.QT_VOTOS_NULOS);
-
-    const partidos = new Map();
-
-    for (const cand of candidatos) {
-      try {
-        const nrPartido = cand.NR_PARTIDO;
-
-        if (!partidos.has(nrPartido)) {
-          partidos.set(nrPartido, {
-            n: nrPartido,
-            sg: texto(cand.SG_PARTIDO).toUpperCase(),
-            nm: texto(cand.NM_PARTIDO),
-            cand: [],
-          });
-        }
-
-        const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
-        const pctCand = percentual(votosCand, votosValidos);
-
-        const situacao = texto(cand.DS_SIT_TOT_TURNO);
-
-        partidos.get(nrPartido).cand.push({
-          n: cand.NR_CANDIDATO,
-          sqcand: cand.SQ_CANDIDATO,
-          nm: texto(cand.NM_CANDIDATO),
-          nmu: texto(cand.NM_URNA_CANDIDATO),
-          dt: null,
-          dvt: texto(cand.NM_TIPO_DESTINACAO_VOTOS) || null,
-          seq: null,
-          e: situacao?.includes("Eleito") ? "s" : "n",
-          st: situacao || null,
-          vap: String(votosCand),
-          pvap: formatPct(pctCand),
-          pvapn: formatPctN(pctCand),
-          vs: [],
-        });
-      } catch (erroCand) {
-        logger.error(`[Worker] Erro candidato`, {
-          erro: erroCand.message,
-          candidato: cand,
+  const partidos = new Map();
+  for (const cand of candidatos) {
+    try {
+      const nrPartido = cand.NR_PARTIDO;
+      if (!partidos.has(nrPartido)) {
+        partidos.set(nrPartido, {
+          n: nrPartido,
+          sg: texto(cand.SG_PARTIDO).toUpperCase(),
+          nm: texto(cand.NM_PARTIDO),
+          cand: [],
         });
       }
-    }
 
-    const todosCandidatos = [];
+      const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
+      const pctCand = percentual(votosCand, votosValidos);
+      const situacao = texto(cand.DS_SIT_TOT_TURNO);
 
-    for (const [, p] of partidos) {
-      for (const c of p.cand) {
-        todosCandidatos.push(c);
-      }
-    }
-
-    todosCandidatos
-      .sort((a, b) => numero(b.vap) - numero(a.vap))
-      .forEach((c, idx) => {
-        c.seq = String(idx + 1);
+      partidos.get(nrPartido).cand.push({
+        n: cand.NR_CANDIDATO,
+        sqcand: cand.SQ_CANDIDATO,
+        nm: texto(cand.NM_CANDIDATO),
+        nmu: texto(cand.NM_URNA_CANDIDATO),
+        dt: null,
+        dvt: texto(cand.NM_TIPO_DESTINACAO_VOTOS) || null,
+        seq: null,
+        e: situacao?.includes("Eleito") ? "s" : "n",
+        st: situacao || null,
+        vap: String(votosCand),
+        pvap: formatPct(pctCand),
+        pvapn: formatPctN(pctCand),
+        vs: [],
       });
-
-    const agr = [];
-
-    for (const [, p] of partidos) {
-      const totalPartido = p.cand.reduce((s, c) => s + numero(c.vap), 0);
-
-      agr.push({
-        n: null,
-        nm: p.nm,
-        tp: "i",
-        com: p.sg,
-        vag: null,
-        par: [
-          {
-            n: p.n,
-            sg: p.sg,
-            nm: p.nm,
-            nfed: "",
-            tvtn: String(totalPartido),
-            tvtl: "0",
-            tval: "0",
-            tvan: String(totalPartido),
-            cand: p.cand,
-          },
-        ],
+    } catch (erroCand) {
+      logger.error(`[Worker] Erro candidato`, {
+        erro: erroCand.message,
+        candidato: cand,
       });
     }
+  }
 
-    const pctComp = percentual(comparecimento, totalAptos);
-    const pctAbs = percentual(abstencao, totalAptos);
+  const todosCandidatos = [];
+  for (const [, p] of partidos) {
+    for (const c of p.cand) todosCandidatos.push(c);
+  }
+  todosCandidatos
+    .sort((a, b) => numero(b.vap) - numero(a.vap))
+    .forEach((c, idx) => (c.seq = String(idx + 1)));
 
-    const pctVV = percentual(votosValidos, totalVotos);
-    const pctVB = percentual(votosBrancos, totalVotos);
-    const pctVN = percentual(votosNulos, totalVotos);
-
-    const existeEleito = todosCandidatos.some((c) => c.e === "s");
-
-    const json = {
-      ele: String(detalhe.CD_ELEICAO),
-      t: String(detalhe.NR_TURNO),
-      f: "o",
-      sup: "n",
-      tpabr: abrangencia,
-      cdabr: String(cdMunicipio),
-      dg: detalhe.DT_GERACAO || null,
-      hg: detalhe.HH_GERACAO || null,
-      dt: detalhe.DT_ULTIMA_TOTALIZACAO || null,
-      ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
-      dv: "s",
-      tf: "s",
-      and: "f",
-      esae: existeEleito ? "n" : "s",
-      mnae: [],
-      carg: [
+  const agr = [];
+  for (const [, p] of partidos) {
+    const totalPartido = p.cand.reduce((s, c) => s + numero(c.vap), 0);
+    agr.push({
+      n: null,
+      nm: p.nm,
+      tp: "i",
+      com: p.sg,
+      vag: null,
+      par: [
         {
-          cd: cdCargo,
-          nmn: texto(detalhe.DS_CARGO),
-          nmm: texto(detalhe.DS_CARGO),
-          nmf: texto(detalhe.DS_CARGO),
-          nv: "1",
-          fed: [],
-          agr,
+          n: p.n,
+          sg: p.sg,
+          nm: p.nm,
+          nfed: "",
+          tvtn: String(totalPartido),
+          tvtl: "0",
+          tval: "0",
+          tvan: String(totalPartido),
+          cand: p.cand,
         },
       ],
-      s: null,
-      e: {
-        te: String(totalAptos),
-        c: String(comparecimento),
-        pc: formatPct(pctComp),
-        pcn: formatPctN(pctComp),
-        a: String(abstencao),
-        pa: formatPct(pctAbs),
-        pan: formatPctN(pctAbs),
-      },
-      v: {
-        tv: String(totalVotos),
-        vv: String(votosValidos),
-        pvv: formatPct(pctVV),
-        pvvn: formatPctN(pctVV),
-        vnom: String(votosNominais),
-        vl: String(votosLegenda),
-        vb: String(votosBrancos),
-        pvb: formatPct(pctVB),
-        pvbn: formatPctN(pctVB),
-        vn: String(votosNulos),
-        pvn: formatPct(pctVN),
-        pvnn: formatPctN(pctVN),
-      },
-    };
-
-    fs.writeFileSync(caminhoArquivo, JSON.stringify(json, null, 2));
-
-    logger.info(`[Worker] Cidade finalizada`, {
-      municipio: texto(detalhe.NM_MUNICIPIO),
-      arquivo: caminhoArquivo,
-      candidatos: candidatos.length,
-    });
-
-    parentPort.postMessage({ ok: true });
-  } catch (erro) {
-    logger.error(`[Worker] Erro processamento cidade`, {
-      erro: erro.message,
-      detalhe,
-    });
-
-    parentPort.postMessage({
-      ok: false,
-      erro: erro.message,
     });
   }
-};
 
-processar();
+  const pctComp = percentual(comparecimento, totalAptos);
+  const pctAbs = percentual(abstencao, totalAptos);
+  const pctVV = percentual(votosValidos, totalVotos);
+  const pctVB = percentual(votosBrancos, totalVotos);
+  const pctVN = percentual(votosNulos, totalVotos);
+
+  const existeEleito = todosCandidatos.some((c) => c.e === "s");
+
+  const jsonCidade = {
+    ele: String(detalhe.CD_ELEICAO),
+    t: String(detalhe.NR_TURNO),
+    f: "o",
+    sup: "n",
+    tpabr: abrangencia,
+    cdabr: String(cdMunicipio),
+    dg: detalhe.DT_GERACAO || null,
+    hg: detalhe.HH_GERACAO || null,
+    dt: detalhe.DT_ULTIMA_TOTALIZACAO || null,
+    ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
+    dv: "s",
+    tf: "s",
+    and: "f",
+    esae: existeEleito ? "n" : "s",
+    mnae: [],
+    carg: [
+      {
+        cd: cdCargo,
+        nmn: texto(detalhe.DS_CARGO),
+        nmm: texto(detalhe.DS_CARGO),
+        nmf: texto(detalhe.DS_CARGO),
+        nv: "1",
+        fed: [],
+        agr,
+      },
+    ],
+    s: null,
+    e: {
+      te: String(totalAptos),
+      c: String(comparecimento),
+      pc: formatPct(pctComp),
+      pcn: formatPctN(pctComp),
+      a: String(abstencao),
+      pa: formatPct(pctAbs),
+      pan: formatPctN(pctAbs),
+    },
+    v: {
+      tv: String(totalVotos),
+      vv: String(votosValidos),
+      pvv: formatPct(pctVV),
+      pvvn: formatPctN(pctVV),
+      vnom: String(votosNominais),
+      vl: String(votosLegenda),
+      vb: String(votosBrancos),
+      pvb: formatPct(pctVB),
+      pvbn: formatPctN(pctVB),
+      vn: String(votosNulos),
+      pvn: formatPct(pctVN),
+      pvnn: formatPctN(pctVN),
+    },
+  };
+
+  fs.writeFileSync(caminhoArquivo, JSON.stringify(jsonCidade, null, 2));
+
+  parentPort.postMessage({
+    ok: true,
+    estado: uf || null,
+    nomeEstado: nomeUF,
+    cidade: { codTSE: cdMunicipio, nome: String(detalhe.NM_MUNICIPIO || "") },
+  });
+} catch (erro) {
+  logger.error(`[Worker] Erro processamento cidade`, {
+    erro: erro.message,
+    detalhe: workerData.detalhe,
+  });
+
+  parentPort.postMessage({ ok: false, erro: erro.message });
+}
