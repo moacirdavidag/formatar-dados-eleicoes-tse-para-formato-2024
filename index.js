@@ -1,64 +1,37 @@
-// import fs from 'fs';
-// import path from 'path';
-// import csvParser from 'csv-parser';
-
+import express from "express";
 import path from "path";
-import mapearCSVJSON from "./services/mapear-csv-json.js";
+import { fileURLToPath } from "url";
+import { engine } from "express-handlebars";
 
-// const csvFilePath = path.join(
-//   __dirname,
-//   "votacao_candidato_munzona_2020_BRASIL.csv"
-// );
-// const outputJsonPath = path.join(__dirname, "resultados_json_tratado.json");
+import indexRoutes from "./routes/index.routes.js";
 
-// const results = [];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// fs.createReadStream(csvFilePath, { encoding: "utf8" })
-//   .pipe(
-//     csvParser({
-//       separator: ";",
-//       quote: '"',
-//     })
-//   )
-//   .on("data", (data) => {
-//     results.push(data);
-//   })
-//   .on("end", () => {
-//     fs.writeFile(
-//       outputJsonPath,
-//       JSON.stringify(results, null, 2),
-//       "utf8",
-//       (err) => {
-//         if (err) {
-//           return console.error("Erro ao escrever JSON:", err.message);
-//         }
-//         console.log(`Arquivo JSON criado com todos os registros:`);
-//         console.log(outputJsonPath);
-//       }
-//     );
-//   })
-//   .on("error", (err) => {
-//     console.error("Erro ao ler o CSV:", err.message);
-//   });
+const app = express();
 
-console.log(`Tá rodando :)`);
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
+app.use(express.static(path.join(__dirname, "public")));
 
-await mapearCSVJSON(
-  {
-    caminhoDetalhe: path.join(
-      process.cwd(),
-      "assets",
-      "arquivos_tse",
-      "detalhe_votacao_munzona_2020_PB.csv"
-    ),
-    caminhoCandidatos: path.join(
-      process.cwd(),
-      "assets",
-      "arquivos_tse",
-      "votacao_candidato_munzona_2020_PB.csv"
-    )
-  },
-  2020,
-  "PB"
+app.engine(
+  "hbs",
+  engine({
+    extname: ".hbs",
+    defaultLayout: "main",
+    layoutsDir: path.join(__dirname, "views/layouts"),
+    partialsDir: path.join(__dirname, "views/partials"),
+  })
 );
+
+app.set("view engine", "hbs");
+app.set("views", path.join(__dirname, "views"));
+
+app.use("/", indexRoutes);
+
+const PORT = 3000;
+
+app.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+});

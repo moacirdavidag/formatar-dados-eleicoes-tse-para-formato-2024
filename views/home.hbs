@@ -1,0 +1,56 @@
+<h1 class="mb-4 text-center">Importação de Dados TSE</h1>
+
+<div class="row justify-content-center">
+  <div class="col-lg-6 col-md-8">
+    <div class="card shadow-lg border-0">
+      <div class="card-body p-4">
+        <form id="uploadForm" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label for="anoEleicao" class="form-label fw-semibold">Ano da Eleição</label>
+            <select class="form-select" id="anoEleicao" name="anoEleicao" required>
+              <optgroup label="Eleições Gerais/Estaduais">
+                <option value="1994">1994</option>
+                <option value="1998">1998</option>
+                <option value="2002">2002</option>
+                <option value="2006">2006</option>
+                <option value="2010">2010</option>
+                <option value="2014">2014</option>
+                <option value="2018">2018</option>
+                <option value="2022">2022</option>
+                <option value="2026">2026</option>
+              </optgroup>
+              <optgroup label="Eleições Municipais">
+                <option value="1996">1996</option>
+                <option value="2000">2000</option>
+                <option value="2004">2004</option>
+                <option value="2008">2008</option>
+                <option value="2012">2012</option>
+                <option value="2016">2016</option>
+                <option value="2020" selected>2020</option>
+                <option value="2024">2024</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="detalheCSV" class="form-label fw-semibold">Arquivo Detalhe (detalhe_votacao_munzona_YYYY_UF.csv)</label>
+            <input class="form-control form-control-lg" type="file" id="detalheCSV" name="detalheCSV" accept=".csv" required>
+          </div>
+
+          <div class="mb-3">
+            <label for="candidatoCSV" class="form-label fw-semibold">Arquivo Candidatos (votacao_candidato_munzona_YYYY_UF.csv)</label>
+            <input class="form-control form-control-lg" type="file" id="candidatoCSV" name="candidatoCSV" accept=".csv" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg w-100">Iniciar Importação</button>
+        </form>
+
+        <div class="progress mt-4 rounded-pill" style="height: 30px; display:none;">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-success text-dark fw-bold" role="progressbar" style="width: 0%">0%</div>
+        </div>
+
+        <div class="mt-3" id="feedback"></div>
+      </div>
+    </div>
+  </div>
+</div>
