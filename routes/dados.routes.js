@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { renderDados } from "../controllers/dados.controller.js";
+import { renderDados,buscarDados } from "../controllers/dados.controller.js";
 
 const router = Router();
 
 router.get("/", renderDados);
+router.post("/", buscarDados);
 
 export default router;

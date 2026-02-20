@@ -55,7 +55,7 @@ form?.addEventListener("submit", (e) => {
   xhr.onload = () => {
     if (xhr.status === 200) {
       const lines = xhr.responseText.split("\n").filter(Boolean);
-      const finalEvent = JSON.parse(lines[lines.length - 1]);
+      JSON.parse(lines[lines.length - 1]);
       progressBar.style.width = "100%";
       progressBar.textContent = "100%";
       form.reset();
@@ -77,11 +77,14 @@ const loadingEl = document.getElementById("loading");
 const fallbackEl = document.getElementById("fallback");
 const resultsEl = document.getElementById("results");
 const candidatesEl = document.getElementById("candidates");
+const paginationEl = document.getElementById("pagination");
+const headerResultadoEl = document.getElementById("headerResultado");
 
 const totalVotosEl = document.getElementById("totalVotos");
 const votosValidosEl = document.getElementById("votosValidos");
 const votosNulosEl = document.getElementById("votosNulos");
 const votosBrancosEl = document.getElementById("votosBrancos");
+const votosAbstencaoEl = document.getElementById("votosAbstencao");
 
 const formatBR = (val) =>
   !val
@@ -100,10 +103,8 @@ const btnBuscar = document.getElementById("btnBuscar");
 const btnLimpar = document.getElementById("btnLimpar");
 
 const ANOS_ELEICOES = {
-  gerais: [
-    1982, 1986, 1990, 1994, 1998, 2002, 2006, 2010, 2014, 2018, 2022, 2026,
-  ],
-  municipais: [1988, 1992, 1996, 2000, 2004, 2008, 2012, 2016, 2020, 2024],
+  gerais: [],
+  municipais: [2020],
 };
 
 const populateAno = () => {
@@ -136,9 +137,6 @@ populateAno();
 filterAno.addEventListener("change", async () => {
   const ano = filterAno.value;
 
-  console.log(`Ano: ${ano}`)
-  console.log(CODIGOS_ELEICOES)
-
   filterTurno.innerHTML = '<option value="">Turno</option>';
   filterTurno.disabled = true;
   filterEstado.disabled = true;
@@ -147,9 +145,9 @@ filterAno.addEventListener("change", async () => {
   btnBuscar.disabled = true;
 
   if (ano && CODIGOS_ELEICOES[ano]) {
-    Object.entries(CODIGOS_ELEICOES[ano].turnos).forEach(([key, cod]) => {
+    Object.entries(CODIGOS_ELEICOES[ano].turnos).forEach(([key]) => {
       const opt = document.createElement("option");
-      opt.value = cod;
+      opt.value = key;
       opt.textContent = key === "1" ? "1º Turno" : "2º Turno";
       filterTurno.appendChild(opt);
     });
@@ -210,10 +208,12 @@ filterCargo.addEventListener("change", () => {
 });
 
 btnBuscar.addEventListener("click", async () => {
+  console.log("Clicou no botão buscar");
   loadingEl.style.display = "block";
   fallbackEl.style.display = "none";
   resultsEl.classList.add("d-none");
   candidatesEl.innerHTML = "";
+  paginationEl.innerHTML = "";
 
   const filters = {
     ano: filterAno.value,
@@ -224,52 +224,150 @@ btnBuscar.addEventListener("click", async () => {
   };
 
   try {
-    const res = await fetch("/api/dados", {
+    const res = await fetch("/dados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(filters),
     });
     const data = await res.json();
 
+    const cidadeNome =
+      filterMunicipio.options[filterMunicipio.selectedIndex]?.text || "";
+    const ufSigla = filters.estado;
+    const cargoNome =
+      filterCargo.options[filterCargo.selectedIndex]?.text || "";
+
+    headerResultadoEl.innerHTML = `
+      <div class="text-center mb-4">
+        <h3 class="fw-bold mb-1">${cidadeNome}, ${ufSigla}</h3>
+        <div class="mb-1"><strong>Cargo:</strong> ${cargoNome}</div>
+        <div style="font-size:12px;color:#9aa0a6;">
+          Última atualização em ${data.ht} de ${data.dt}
+        </div>
+      </div>
+    `;
+
+    const candidatos = [];
+
     data.carg?.forEach((cargo) => {
       cargo.agr.forEach((agr) => {
         agr.par.forEach((par) => {
-          par.cand.forEach((c) => {
-            const perc = parseFloat(c.pvapn || "0");
-            const radius = 46;
-            const circumference = 2 * Math.PI * radius;
-            const dashOffset = circumference * (1 - perc / 100);
-
-            const card = document.createElement("div");
-            card.classList.add("candidate-card", "col-md-3");
-
-            card.innerHTML = `
-              <div class="candidate-img-wrapper">
-                <img src="https://via.placeholder.com/100" />
-                <svg width="100" height="100">
-                  <circle r="${radius}" cx="50" cy="50" stroke="#4CAF50" stroke-width="4" fill="none"
-                    stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}" stroke-linecap="round"/>
-                </svg>
-              </div>
-              <div class="candidate-name">${c.nmu}</div>
-              <div class="candidate-number">${c.n}</div>
-              <div class="candidate-votes">${formatBR(c.vap)} votos (${
-              c.pvap
-            }%)</div>
-              <div class="candidate-status ${
-                c.e === "s" ? "elected" : "not-elected"
-              }">${c.st}</div>
-            `;
-            candidatesEl.appendChild(card);
-          });
+          par.cand.forEach((c) => candidatos.push(c));
         });
       });
     });
 
-    totalVotosEl.textContent = formatBR(data.v.tv);
-    votosValidosEl.textContent = formatBR(data.v.vv);
-    votosNulosEl.textContent = formatBR(data.v.vn);
-    votosBrancosEl.textContent = formatBR(data.v.vb);
+    const pageSize = 4;
+    let currentPage = 1;
+
+    const renderPage = () => {
+      candidatesEl.innerHTML = "";
+
+      const start = (currentPage - 1) * pageSize;
+      const pageItems = candidatos.slice(start, start + pageSize);
+
+      pageItems.forEach((c) => {
+        const perc = parseFloat(c.pvapn || "0");
+        const radius = 46;
+        const circumference = 2 * Math.PI * radius;
+        const dashOffset = circumference * (1 - perc / 100);
+
+        const card = document.createElement("div");
+        card.classList.add("candidate-card");
+
+        const circleColor = c.e === "s" ? "#4CAF50" : "#ccc";
+
+        card.innerHTML = `
+          <div class="candidate-img-wrapper">
+            <img src='https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${
+              filters.estado
+            }${c.sqcand}_div.jpg' alt='${c.nmu}' />
+            <svg width="100" height="100">
+              <circle r="${radius}" cx="50" cy="50" stroke="${circleColor}" stroke-width="4" fill="none"
+                stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="candidate-name">${c.nmu}</div>
+          <div class="candidate-number">${c.n}</div>
+          <div class="candidate-votes">${formatBR(c.vap)} votos (${
+          c.pvap
+        }%)</div>
+          <div class="candidate-status ${
+            c.e === "s" ? "elected" : "not-elected"
+          }">${c.st}</div>
+        `;
+
+        candidatesEl.appendChild(card);
+      });
+
+      renderPagination();
+    };
+
+    const renderPagination = () => {
+      const totalPages = Math.ceil(candidatos.length / pageSize);
+      paginationEl.innerHTML = "";
+
+      if (totalPages <= 1) return;
+
+      const createBtn = (label, page, disabled = false, active = false) => {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        btn.className = `btn btn-sm ${
+          active ? "btn-success" : "btn-outline-success"
+        }`;
+        btn.disabled = disabled;
+        btn.onclick = () => {
+          currentPage = page;
+          renderPage();
+        };
+        return btn;
+      };
+
+      paginationEl.appendChild(
+        createBtn("«", currentPage - 1, currentPage === 1)
+      );
+
+      for (let i = 1; i <= totalPages; i++) {
+        paginationEl.appendChild(createBtn(i, i, false, i === currentPage));
+      }
+
+      paginationEl.appendChild(
+        createBtn("»", currentPage + 1, currentPage === totalPages)
+      );
+    };
+
+    renderPage();
+
+    const tv = parseFloat(data.v.tv || 0);
+    const vv = parseFloat(data.v.vv || 0);
+    const vn = parseFloat(data.v.vn || 0);
+    const vb = parseFloat(data.v.vb || 0);
+    const abst = parseFloat(data.e?.a || 0);
+
+    const pct = (val, total) =>
+      total ? ((val / total) * 100).toFixed(2) : "0.00";
+
+    totalVotosEl.innerHTML = `<div>${formatBR(tv)}</div>`;
+
+    votosValidosEl.innerHTML = `
+      <div>${formatBR(vv)}</div>
+      <div style="font-size:12px;color:#6c757d;">${pct(vv, tv)}%</div>
+    `;
+
+    votosNulosEl.innerHTML = `
+      <div>${formatBR(vn)}</div>
+      <div style="font-size:12px;color:#6c757d;">${pct(vn, tv)}%</div>
+    `;
+
+    votosBrancosEl.innerHTML = `
+      <div>${formatBR(vb)}</div>
+      <div style="font-size:12px;color:#6c757d;">${pct(vb, tv)}%</div>
+    `;
+
+    votosAbstencaoEl.innerHTML = `
+      <div>${formatBR(abst)}</div>
+      <div style="font-size:12px;color:#6c757d;">${data.e?.pa || "0"}%</div>
+    `;
 
     resultsEl.classList.remove("d-none");
   } catch {
@@ -292,6 +390,7 @@ btnLimpar.addEventListener("click", () => {
   filterCargo.disabled = true;
   btnBuscar.disabled = true;
   candidatesEl.innerHTML = "";
+  paginationEl.innerHTML = "";
   resultsEl.classList.add("d-none");
   fallbackEl.style.display = "block";
 });
