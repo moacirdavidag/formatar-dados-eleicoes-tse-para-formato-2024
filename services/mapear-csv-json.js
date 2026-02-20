@@ -1,12 +1,14 @@
 import fs from "fs";
 import csvParser from "csv-parser";
 import { Worker } from "worker_threads";
+import iconv from "iconv-lite";
 import logger from "../logger.config.js";
 
 const lerCSV = (arquivo) =>
   new Promise((resolve, reject) => {
     const dados = [];
     fs.createReadStream(arquivo)
+      .pipe(iconv.decodeStream("win1252"))
       .pipe(csvParser({ separator: ";", quote: '"' }))
       .on("data", (row) => dados.push(row))
       .on("end", () => resolve(dados))
@@ -69,7 +71,7 @@ const mapearCSVJSON = async (caminhos, anoEleicao) => {
     }
 
     logger.info(
-      `[Mapeamento CSV-JSON] Total cidades para processar: ${cidades.size}`
+      `[Mapeamento CSV-JSON] Total de arquivos para processar: ${cidades.size}`
     );
 
     const promises = [];
