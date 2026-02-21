@@ -29,7 +29,7 @@ const filterCargo = document.getElementById("filterCargo");
 const btnBuscar = document.getElementById("btnBuscar");
 const btnLimpar = document.getElementById("btnLimpar");
 
-filterAno.addEventListener("change", async () => {
+filterAno?.addEventListener("change", async () => {
   const ano = filterAno.value;
 
   filterTurno.innerHTML = '<option value="">Turno</option>';
@@ -69,13 +69,13 @@ filterAno.addEventListener("change", async () => {
   });
 });
 
-filterTurno.addEventListener("change", () => {
+filterTurno?.addEventListener("change", () => {
   filterEstado.disabled = !filterTurno.value;
   filterMunicipio.disabled = true;
   btnBuscar.disabled = true;
 });
 
-filterEstado.addEventListener("change", async () => {
+filterEstado?.addEventListener("change", async () => {
   const uf = filterEstado.value;
   filterMunicipio.innerHTML = '<option value="">Município</option>';
   filterMunicipio.disabled = !uf;
@@ -93,16 +93,16 @@ filterEstado.addEventListener("change", async () => {
   });
 });
 
-filterMunicipio.addEventListener("change", () => {
+filterMunicipio?.addEventListener("change", () => {
   filterCargo.disabled = !filterMunicipio.value;
   btnBuscar.disabled = !filterMunicipio.value || !filterCargo.value;
 });
 
-filterCargo.addEventListener("change", () => {
+filterCargo?.addEventListener("change", () => {
   btnBuscar.disabled = !filterCargo.value;
 });
 
-btnBuscar.addEventListener("click", async () => {
+btnBuscar?.addEventListener("click", async () => {
   loadingEl.style.display = "block";
   fallbackEl.style.display = "none";
   resultsEl.classList.add("d-none");
@@ -317,7 +317,7 @@ btnBuscar.addEventListener("click", async () => {
   }
 });
 
-btnLimpar.addEventListener("click", () => {
+btnLimpar?.addEventListener("click", () => {
   filterAno.value = "";
   filterTurno.innerHTML = '<option value="">Turno</option>';
   filterTurno.disabled = true;
