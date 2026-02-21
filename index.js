@@ -5,6 +5,7 @@ import { engine } from "express-handlebars";
 
 import indexRoutes from "./routes/index.routes.js";
 import dadosRoutes from "./routes/dados.routes.js";
+import arquivosRoutes from "./routes/arquivos.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,7 @@ app.set("views", path.join(__dirname, "views"));
 
 app.use("/", indexRoutes);
 app.use("/dados", dadosRoutes);
+app.use("/arquivos", arquivosRoutes);
 
 const PORT = 3000;
 
