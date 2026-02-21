@@ -123,8 +123,9 @@
   font-size: 14px;
 }
 .candidate-number {
-  font-size: 12px;
+  font-size: 14px;
   color: #555;
+  font-weight: 400;
   margin-bottom: 4px;
 }
 .candidate-votes {
@@ -140,4 +141,20 @@
 }
 .not-elected {
   color: #ff6b6b;
+}
+
+#statsRow .col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+#statsRow .fw-bold {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+#statsRow div[id] {
+  font-size: 1.1rem;
+  font-weight: 600;
 }

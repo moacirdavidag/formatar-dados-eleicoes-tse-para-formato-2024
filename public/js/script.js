@@ -84,7 +84,7 @@ const totalVotosEl = document.getElementById("totalVotos");
 const votosValidosEl = document.getElementById("votosValidos");
 const votosNulosEl = document.getElementById("votosNulos");
 const votosBrancosEl = document.getElementById("votosBrancos");
-const votosAbstencaoEl = document.getElementById("votosAbstencao");
+const votosAbstencaoEl = document.getElementById("totalAbstencoes");
 
 const formatBR = (val) =>
   !val
@@ -208,10 +208,10 @@ filterCargo.addEventListener("change", () => {
 });
 
 btnBuscar.addEventListener("click", async () => {
-  console.log("Clicou no botão buscar");
   loadingEl.style.display = "block";
   fallbackEl.style.display = "none";
   resultsEl.classList.add("d-none");
+  resultsEl.style.display = "none";
   candidatesEl.innerHTML = "";
   paginationEl.innerHTML = "";
 
@@ -229,6 +229,9 @@ btnBuscar.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(filters),
     });
+
+    if (!res.ok) throw new Error("Erro API");
+
     const data = await res.json();
 
     const cidadeNome =
@@ -242,20 +245,32 @@ btnBuscar.addEventListener("click", async () => {
         <h3 class="fw-bold mb-1">${cidadeNome}, ${ufSigla}</h3>
         <div class="mb-1"><strong>Cargo:</strong> ${cargoNome}</div>
         <div style="font-size:12px;color:#9aa0a6;">
-          Última atualização em ${data.ht} de ${data.dt}
+          Última atualização em ${data?.ht || "-"} de ${data?.dt || "-"}
         </div>
       </div>
     `;
 
     const candidatos = [];
 
-    data.carg?.forEach((cargo) => {
-      cargo.agr.forEach((agr) => {
-        agr.par.forEach((par) => {
-          par.cand.forEach((c) => candidatos.push(c));
+    if (Array.isArray(data?.carg)) {
+      data.carg.forEach((cargo) => {
+        cargo?.agr?.forEach((agr) => {
+          agr?.par?.forEach((par) => {
+            par?.cand?.forEach((c) => {
+              let candidato = {
+                ...c,
+                sg: par.sg,
+              };
+              candidatos.push(candidato);
+            });
+          });
         });
       });
-    });
+    }
+
+    const candidatosOrdenados = candidatos.sort(
+      (a, b) => parseInt(a.seq, 10) - parseInt(b.seq, 10)
+    );
 
     const pageSize = 4;
     let currentPage = 1;
@@ -264,10 +279,10 @@ btnBuscar.addEventListener("click", async () => {
       candidatesEl.innerHTML = "";
 
       const start = (currentPage - 1) * pageSize;
-      const pageItems = candidatos.slice(start, start + pageSize);
+      const pageItems = candidatosOrdenados.slice(start, start + pageSize);
 
       pageItems.forEach((c) => {
-        const perc = parseFloat(c.pvapn || "0");
+        const perc = parseFloat(String(c.pvapn || "0").replace(",", "."));
         const radius = 46;
         const circumference = 2 * Math.PI * radius;
         const dashOffset = circumference * (1 - perc / 100);
@@ -277,25 +292,44 @@ btnBuscar.addEventListener("click", async () => {
 
         const circleColor = c.e === "s" ? "#4CAF50" : "#ccc";
 
+        const baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${filters.estado}${c.sqcand}_div`;
+        const extensions = ["jpg", "jpeg", "png", "webp"];
+
         card.innerHTML = `
           <div class="candidate-img-wrapper">
-            <img src='https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${
-              filters.estado
-            }${c.sqcand}_div.jpg' alt='${c.nmu}' />
+            <img alt="${c.nmu}" />
             <svg width="100" height="100">
               <circle r="${radius}" cx="50" cy="50" stroke="${circleColor}" stroke-width="4" fill="none"
                 stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}" stroke-linecap="round"/>
             </svg>
           </div>
           <div class="candidate-name">${c.nmu}</div>
-          <div class="candidate-number">${c.n}</div>
+          <div class="candidate-number">${c.n} - ${c.sg}</div>
           <div class="candidate-votes">${formatBR(c.vap)} votos (${
           c.pvap
         }%)</div>
           <div class="candidate-status ${
-            c.e === "s" ? "elected" : "not-elected"
+            c.e === "s" && c.st !== "Não Eleito" ? "elected" : 'not-elected'
           }">${c.st}</div>
         `;
+
+        const img = card.querySelector("img");
+        let index = 0;
+
+        const tryLoad = () => {
+          if (index >= extensions.length) {
+            img.src = "/img/placeholder.png";
+            return;
+          }
+          img.src = `${baseImg}.${extensions[index]}`;
+        };
+
+        img.onerror = () => {
+          index++;
+          tryLoad();
+        };
+
+        tryLoad();
 
         candidatesEl.appendChild(card);
       });
@@ -338,16 +372,25 @@ btnBuscar.addEventListener("click", async () => {
 
     renderPage();
 
-    const tv = parseFloat(data.v.tv || 0);
-    const vv = parseFloat(data.v.vv || 0);
-    const vn = parseFloat(data.v.vn || 0);
-    const vb = parseFloat(data.v.vb || 0);
-    const abst = parseFloat(data.e?.a || 0);
+    const tv = parseFloat(data?.v?.tv || 0);
+    const vv = parseFloat(data?.v?.vv || 0);
+    const vn = parseFloat(data?.v?.vn || 0);
+    const vb = parseFloat(data?.v?.vb || 0);
+    const abst = parseFloat(data?.e?.a || 0);
+    const pa = data?.e?.pa || 0
 
     const pct = (val, total) =>
-      total ? ((val / total) * 100).toFixed(2) : "0.00";
+      total
+        ? Intl.NumberFormat("pt-BR", {
+            maximumFractionDigits: 2,
+            minimumFractionDigits: 2,
+          }).format((val / total) * 100)
+        : "0,00";
 
-    totalVotosEl.innerHTML = `<div>${formatBR(tv)}</div>`;
+    totalVotosEl.innerHTML = `
+      <div>${formatBR(tv)}</div>
+      <div style="font-size:12px;color:#6c757d;">Fonte dos dados: TSE</div>
+      `;
 
     votosValidosEl.innerHTML = `
       <div>${formatBR(vv)}</div>
@@ -366,11 +409,12 @@ btnBuscar.addEventListener("click", async () => {
 
     votosAbstencaoEl.innerHTML = `
       <div>${formatBR(abst)}</div>
-      <div style="font-size:12px;color:#6c757d;">${data.e?.pa || "0"}%</div>
+      <div style="font-size:12px;color:#6c757d;">${pa}%</div>
     `;
 
     resultsEl.classList.remove("d-none");
-  } catch {
+    resultsEl.style.display = "block";
+  } catch (err) {
     fallbackEl.textContent = "Erro ao carregar os dados.";
     fallbackEl.style.display = "block";
   } finally {
