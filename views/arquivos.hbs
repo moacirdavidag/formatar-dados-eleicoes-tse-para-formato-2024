@@ -1,0 +1,52 @@
+<h1 class="mb-4 text-center">Fontes de dados - Arquivos Enviados</h1>
+
+<div class="card shadow-lg border-0 mb-4">
+  <div class="card-body">
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Nome do Arquivo</th>
+            <th>Tamanho</th>
+            <th>Data de Upload</th>
+            <th class="text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="filesTable"></tbody>
+      </table>
+    </div>
+
+    <div id="pagination" class="d-flex justify-content-center gap-2 mt-3"></div>
+
+  </div>
+</div>
+
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar exclusão</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Deseja realmente excluir este arquivo?
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-danger" id="confirmDelete">Excluir</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="snackbar" class="position-fixed bottom-0 end-0 p-3" style="z-index:9999; display:none;">
+  <div class="toast align-items-center text-bg-dark border-0 show">
+    <div class="d-flex">
+      <div class="toast-body" id="snackbarText"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="hideSnackbar()"></button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/js/arquivos.js"></script>

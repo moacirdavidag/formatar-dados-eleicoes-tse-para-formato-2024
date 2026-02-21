@@ -1,0 +1,112 @@
+<h1 class="mb-4 text-center">Resultados das Eleições</h1>
+
+<div class="card shadow-lg border-0 mb-4">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md">
+        <select id="filterAno" class="form-select">
+          <option value="">Ano</option>
+          {{#each anos}}
+            <option value="{{this}}">{{this}}</option>
+          {{/each}}
+        </select>
+      </div>
+
+      <div class="col-md">
+        <select id="filterTurno" class="form-select" disabled>
+          <option value="">Turno</option>
+        </select>
+      </div>
+
+      <div class="col-md">
+        <select id="filterEstado" class="form-select" disabled>
+          <option value="">Estado</option>
+        </select>
+      </div>
+
+      <div class="col-md">
+        <select id="filterMunicipio" class="form-select" disabled>
+          <option value="">Município</option>
+        </select>
+      </div>
+
+      <div class="col-md">
+        <select id="filterCargo" class="form-select" disabled>
+          <option value="">Cargo</option>
+        </select>
+      </div>
+
+      <div class="col-md-auto d-flex gap-2">
+        <button
+          id="btnBuscar"
+          class="btn btn-success d-flex align-items-center"
+          disabled
+        >
+          <i class="bi bi-search me-2"></i>Buscar
+        </button>
+        <button
+          id="btnLimpar"
+          class="btn btn-secondary d-flex align-items-center"
+        >
+          <i class="bi bi-x-circle me-2"></i>Limpar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loading" class="text-center my-5" style="display:none;">
+  <div
+    class="spinner-border text-success"
+    role="status"
+    style="width: 4rem; height:4rem;"
+  >
+    <span class="visually-hidden">Carregando...</span>
+  </div>
+</div>
+
+<div id="fallback" class="text-center text-muted my-5">
+  Selecione os filtros e clique em buscar
+</div>
+
+<div id="results" class="d-none">
+
+  <div id="headerResultado"></div>
+
+  <div
+    id="candidates"
+    class="d-flex flex-wrap gap-4 justify-content-center mb-3"
+  ></div>
+
+  <div id="pagination" class="d-flex justify-content-center gap-2 mb-4"></div>
+
+  <div class="card shadow-sm p-3">
+    <div class="row row-cols-2 row-cols-md-5 text-center g-2" id="statsRow">
+      <div class="col">
+        <div class="fw-bold">Total de Votos</div>
+        <div id="totalVotos"></div>
+      </div>
+
+      <div class="col">
+        <div class="fw-bold">Votos Válidos</div>
+        <div id="votosValidos"></div>
+      </div>
+
+      <div class="col">
+        <div class="fw-bold">Votos Nulos</div>
+        <div id="votosNulos"></div>
+      </div>
+
+      <div class="col">
+        <div class="fw-bold">Votos Brancos</div>
+        <div id="votosBrancos"></div>
+      </div>
+
+      <div class="col">
+        <div class="fw-bold">Abstenções</div>
+        <div id="totalAbstencoes"></div>
+      </div>
+    </div>
+  </div>
+
+</div>

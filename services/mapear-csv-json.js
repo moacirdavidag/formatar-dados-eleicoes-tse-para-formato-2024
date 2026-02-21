@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import csvParser from "csv-parser";
 import { Worker } from "worker_threads";
 import iconv from "iconv-lite";
@@ -15,17 +16,43 @@ const lerCSV = (arquivo) =>
       .on("error", reject);
   });
 
-const mapearCSVJSON = async (caminhos, anoEleicao) => {
+  const appendEstado = (estadoSigla, nomeEstado) => {
+    const dir = path.join(process.cwd(), "public");
+    fs.mkdirSync(dir, { recursive: true });
+  
+    const file = path.join(dir, "estados.json");
+    let estados = [];
+    if (fs.existsSync(file)) {
+      estados = JSON.parse(fs.readFileSync(file, "utf-8"));
+    }
+  
+    if (!estados.find((e) => e.sigla === estadoSigla)) {
+      estados.push({ sigla: estadoSigla, nome: nomeEstado });
+      fs.writeFileSync(file, JSON.stringify(estados, null, 2));
+    }
+  };
+
+const appendCidade = (uf, cidadeObj) => {
+  const file = path.join("public", `cidades_${uf}.json`);
+  let cidades = [];
+  if (fs.existsSync(file)) {
+    cidades = JSON.parse(fs.readFileSync(file, "utf-8"));
+  }
+  if (!cidades.find((c) => c.codTSE === cidadeObj.codTSE)) {
+    cidades.push(cidadeObj);
+    fs.writeFileSync(file, JSON.stringify(cidades, null, 2));
+  }
+};
+
+const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
   try {
     logger.info(`[Mapeamento CSV-JSON] Iniciando processamento ${anoEleicao}`);
 
     const { caminhoDetalhe, caminhoCandidatos } = caminhos;
-
     const detalhe = await lerCSV(caminhoDetalhe);
     const candidatos = await lerCSV(caminhoCandidatos);
 
     const detalheIndex = new Map();
-
     for (const d of detalhe) {
       const chave = [
         d.ANO_ELEICAO,
@@ -34,12 +61,10 @@ const mapearCSVJSON = async (caminhos, anoEleicao) => {
         d.CD_CARGO,
         d.NR_TURNO,
       ].join("_");
-
       detalheIndex.set(chave, d);
     }
 
     const cidades = new Map();
-
     for (const cand of candidatos) {
       const chave = [
         cand.ANO_ELEICAO,
@@ -48,35 +73,27 @@ const mapearCSVJSON = async (caminhos, anoEleicao) => {
         cand.CD_CARGO,
         cand.NR_TURNO,
       ].join("_");
-
       const det = detalheIndex.get(chave);
-
       if (!det) {
         logger.error(`[Mapeamento CSV-JSON] Detalhe não encontrado`, cand);
         continue;
       }
-
       const idCidade = [cand.CD_ELEICAO, cand.CD_MUNICIPIO, cand.CD_CARGO].join(
         "_"
       );
-
-      if (!cidades.has(idCidade)) {
-        cidades.set(idCidade, {
-          detalhe: det,
-          candidatos: [],
-        });
-      }
-
+      if (!cidades.has(idCidade))
+        cidades.set(idCidade, { detalhe: det, candidatos: [] });
       cidades.get(idCidade).candidatos.push(cand);
     }
 
     logger.info(
       `[Mapeamento CSV-JSON] Total de arquivos para processar: ${cidades.size}`
     );
+    const totalCidades = cidades.size;
+    let cidadesProcessadas = 0;
 
     const promises = [];
-
-    for (const [idCidade, cidade] of cidades) {
+    for (const [idCidade, cidade] of cidades.entries()) {
       promises.push(
         new Promise((resolve, reject) => {
           const worker = new Worker(
@@ -89,10 +106,17 @@ const mapearCSVJSON = async (caminhos, anoEleicao) => {
 
           worker.on("message", (msg) => {
             if (msg?.ok) {
+              cidadesProcessadas++;
+              if (callback) callback(cidadesProcessadas, totalCidades);
               logger.info(
                 `[Mapeamento CSV-JSON] Cidade processada com sucesso`,
                 { idCidade }
               );
+
+              if (msg.estado && msg.nomeEstado)
+                appendEstado(msg.estado, msg.nomeEstado);
+              if (msg.cidade) appendCidade(msg.estado, msg.cidade);
+
               resolve();
             } else {
               logger.error(`[Mapeamento CSV-JSON] Erro cidade`, {
@@ -125,7 +149,6 @@ const mapearCSVJSON = async (caminhos, anoEleicao) => {
     }
 
     await Promise.all(promises);
-
     logger.info(`[Mapeamento CSV-JSON] Finalizado com sucesso`);
   } catch (erro) {
     logger.error(`[Mapeamento CSV-JSON] Erro geral`, erro);

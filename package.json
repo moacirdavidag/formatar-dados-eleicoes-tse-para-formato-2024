@@ -13,8 +13,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "body-parser": "^2.2.2",
     "csv-parser": "^3.2.0",
+    "express": "^5.2.1",
+    "express-handlebars": "^8.0.2",
     "iconv-lite": "^0.7.2",
+    "multer": "^2.0.2",
     "winston": "^3.19.0"
   },
   "devDependencies": {
