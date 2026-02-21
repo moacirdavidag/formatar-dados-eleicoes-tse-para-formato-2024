@@ -6,6 +6,9 @@
       <div class="col-md">
         <select id="filterAno" class="form-select">
           <option value="">Ano</option>
+          {{#each anos}}
+            <option value="{{this}}">{{this}}</option>
+          {{/each}}
         </select>
       </div>
 

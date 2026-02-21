@@ -3,18 +3,14 @@ import path from "path";
 import fs from "fs/promises";
 import logger from "../logger.config.js";
 
-export const renderDados = (req, res) => {
-  const anosGerais = [
-    
-  ];
-  const anosMunicipais = [
-    2020,
-  ];
+export const renderDados = async (req, res) => {
+  const publicPath = path.join(process.cwd(), "public");
+  const dirs = await fs.readdir(publicPath, { withFileTypes: true });
 
-  const anos = {
-    gerais: anosGerais,
-    municipais: anosMunicipais,
-  };
+  const anos = dirs
+    .filter((d) => d.isDirectory() && /^ele\d{4}$/.test(d.name))
+    .map((d) => d.name.replace("ele", ""))
+    .sort((a, b) => Number(b) - Number(a));
 
   res.render("dados", { anos });
 };
@@ -22,7 +18,13 @@ export const renderDados = (req, res) => {
 export const buscarDados = async (req, res) => {
   try {
     const { ano, turno, estado, municipio, cargo } = req.body;
-    logger.debug("Filtros recebidos:", { ano, turno, estado, municipio, cargo });
+    logger.debug("Filtros recebidos:", {
+      ano,
+      turno,
+      estado,
+      municipio,
+      cargo,
+    });
 
     if (!ano || !turno || !estado || !municipio || !cargo) {
       logger.info("Requisição com filtros incompletos");
@@ -53,15 +55,18 @@ export const buscarDados = async (req, res) => {
       await fs.access(filePath);
     } catch {
       logger.error(`Arquivo da eleição não encontrado: ${filePath}`);
-      return res.status(404).json({ error: "Dados da eleição não disponíveis" });
+      return res
+        .status(404)
+        .json({ error: "Dados da eleição não disponíveis" });
     }
 
     const fileContent = await fs.readFile(filePath, "utf-8");
     const data = JSON.parse(fileContent);
 
-    logger.info(`Dados encontrados para ${ano}-${turno}-${estado}-${municipio}-${cargo}`);
+    logger.info(
+      `Dados encontrados para ${ano}-${turno}-${estado}-${municipio}-${cargo}`
+    );
     return res.json(data);
-
   } catch (err) {
     logger.error("Erro ao buscar dados:", err);
     return res.status(500).json({ error: "Erro ao buscar dados" });

@@ -1,78 +1,5 @@
 import CODIGOS_ELEICOES from "./codigos_eleicoes.js";
 
-const form = document.getElementById("uploadForm");
-const progressWrapper = document.querySelector(".progress");
-const progressBar = document.querySelector(".progress-bar");
-const feedback = document.getElementById("feedback");
-
-form?.addEventListener("submit", (e) => {
-  e.preventDefault();
-
-  const detalheFile = document.getElementById("detalheCSV").files[0];
-  const candidatoFile = document.getElementById("candidatoCSV").files[0];
-  const anoEleicao = document.getElementById("anoEleicao").value;
-
-  if (!detalheFile || !candidatoFile) {
-    feedback.innerHTML = `<div class="alert alert-danger">Ambos os arquivos são obrigatórios!</div>`;
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("detalheCSV", detalheFile);
-  formData.append("candidatoCSV", candidatoFile);
-  formData.append("anoEleicao", anoEleicao);
-
-  progressWrapper.style.display = "block";
-  progressBar.style.width = "0%";
-  progressBar.textContent = "0%";
-  feedback.innerHTML = "";
-
-  const xhr = new XMLHttpRequest();
-  let lastIndex = 0;
-
-  xhr.onreadystatechange = () => {
-    if (xhr.readyState === 3) {
-      const chunk = xhr.responseText.slice(lastIndex);
-      lastIndex = xhr.responseText.length;
-
-      const lines = chunk.split("\n").filter(Boolean);
-      lines.forEach((line) => {
-        try {
-          const event = JSON.parse(line);
-          if (event.progress !== undefined) {
-            progressBar.style.width = event.progress + "%";
-            progressBar.textContent = event.progress + "%";
-
-            if (event.uf && event.cidade) {
-              feedback.innerHTML = `Processando ${event.cidade} (${event.uf})`;
-            }
-          }
-        } catch {}
-      });
-    }
-  };
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      const lines = xhr.responseText.split("\n").filter(Boolean);
-      JSON.parse(lines[lines.length - 1]);
-      progressBar.style.width = "100%";
-      progressBar.textContent = "100%";
-      form.reset();
-      feedback.innerHTML = `<div class="alert alert-success">Importação finalizada! <br>Ano da eleição: ${anoEleicao}</div>`;
-    } else {
-      feedback.innerHTML = `<div class="alert alert-danger">Erro no servidor</div>`;
-    }
-  };
-
-  xhr.onerror = () => {
-    feedback.innerHTML = `<div class="alert alert-danger">Erro de conexão</div>`;
-  };
-
-  xhr.open("POST", "/importar");
-  xhr.send(formData);
-});
-
 const loadingEl = document.getElementById("loading");
 const fallbackEl = document.getElementById("fallback");
 const resultsEl = document.getElementById("results");
@@ -101,38 +28,6 @@ const filterMunicipio = document.getElementById("filterMunicipio");
 const filterCargo = document.getElementById("filterCargo");
 const btnBuscar = document.getElementById("btnBuscar");
 const btnLimpar = document.getElementById("btnLimpar");
-
-const ANOS_ELEICOES = {
-  gerais: [],
-  municipais: [2020],
-};
-
-const populateAno = () => {
-  filterAno.innerHTML = '<option value="">Ano</option>';
-
-  const geraisOptgroup = document.createElement("optgroup");
-  geraisOptgroup.label = "Eleições Gerais/Estaduais";
-  ANOS_ELEICOES.gerais.forEach((ano) => {
-    const opt = document.createElement("option");
-    opt.value = ano;
-    opt.textContent = ano;
-    geraisOptgroup.appendChild(opt);
-  });
-
-  const municipaisOptgroup = document.createElement("optgroup");
-  municipaisOptgroup.label = "Eleições Municipais";
-  ANOS_ELEICOES.municipais.forEach((ano) => {
-    const opt = document.createElement("option");
-    opt.value = ano;
-    opt.textContent = ano;
-    municipaisOptgroup.appendChild(opt);
-  });
-
-  filterAno.appendChild(geraisOptgroup);
-  filterAno.appendChild(municipaisOptgroup);
-};
-
-populateAno();
 
 filterAno.addEventListener("change", async () => {
   const ano = filterAno.value;
@@ -309,7 +204,7 @@ btnBuscar.addEventListener("click", async () => {
           c.pvap
         }%)</div>
           <div class="candidate-status ${
-            c.e === "s" && c.st !== "Não Eleito" ? "elected" : 'not-elected'
+            c.e === "s" && c.st !== "Não Eleito" ? "elected" : "not-elected"
           }">${c.st}</div>
         `;
 
@@ -377,7 +272,7 @@ btnBuscar.addEventListener("click", async () => {
     const vn = parseFloat(data?.v?.vn || 0);
     const vb = parseFloat(data?.v?.vb || 0);
     const abst = parseFloat(data?.e?.a || 0);
-    const pa = data?.e?.pa || 0
+    const pa = data?.e?.pa || 0;
 
     const pct = (val, total) =>
       total
