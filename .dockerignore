@@ -1,0 +1,7 @@
+node_modules
+*.log
+data
+assets
+public/ele*
+public/cidades_*.json
+public/estados*.json
