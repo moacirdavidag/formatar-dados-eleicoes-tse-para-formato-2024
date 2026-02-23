@@ -18,6 +18,7 @@ const upload = multer({
 });
 
 router.get("/", (req, res) => res.render("home"));
+router.get("/health", (req, res) => res.status(200).send('Tudo ok :)'));
 router.post(
   "/importar",
   upload.fields([
