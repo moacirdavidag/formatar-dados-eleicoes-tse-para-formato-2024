@@ -278,9 +278,12 @@ function renderCandidatos(data, filters) {
 
     if (totalPages <= 1) return;
 
+    const maxVisible = 5;
+
     const createBtn = (label, page, disabled = false, active = false) => {
       const btn = document.createElement("button");
-      btn.textContent = label;
+
+      btn.innerHTML = label;
 
       btn.className = `btn btn-sm ${
         active ? "btn-success" : "btn-outline-success"
@@ -296,12 +299,38 @@ function renderCandidatos(data, filters) {
       return btn;
     };
 
+    const createDots = () => {
+      const span = document.createElement("span");
+      span.className = "px-2 align-self-center";
+      span.textContent = "...";
+      return span;
+    };
+
     paginationEl.appendChild(
       createBtn("«", currentPage - 1, currentPage === 1)
     );
 
-    for (let i = 1; i <= totalPages; i++) {
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    if (start > 1) {
+      paginationEl.appendChild(createBtn(1, 1, false, currentPage === 1));
+      if (start > 2) paginationEl.appendChild(createDots());
+    }
+
+    for (let i = start; i <= end; i++) {
       paginationEl.appendChild(createBtn(i, i, false, i === currentPage));
+    }
+
+    if (end < totalPages) {
+      if (end < totalPages - 1) paginationEl.appendChild(createDots());
+      paginationEl.appendChild(
+        createBtn(totalPages, totalPages, false, currentPage === totalPages)
+      );
     }
 
     paginationEl.appendChild(
