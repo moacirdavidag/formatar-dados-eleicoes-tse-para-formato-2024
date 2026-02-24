@@ -26,6 +26,13 @@ parentPort.on("message", async (workerData) => {
   try {
     const { detalhe, candidatos } = workerData;
 
+    logger.info(`[Worker] Iniciando processamento`, {
+      municipio: detalhe?.NM_MUNICIPIO,
+      uf: detalhe?.SG_UF,
+      cargo: detalhe?.CD_CARGO,
+      turno: detalhe?.NR_TURNO,
+    });
+
     const uf = String(detalhe.SG_UF || "")
       .trim()
       .toUpperCase();
@@ -47,7 +54,9 @@ parentPort.on("message", async (workerData) => {
     );
     fs.mkdirSync(baseData, { recursive: true });
 
-    const nomeArquivo = `${uf.toLowerCase()}${cdMunicipio}-c${cdCargo}-e${cdEleicaoArquivo}-u.json`;
+    const nomeArquivo = `${uf.toLowerCase()}${cdMunicipio}-c${String(
+      cdCargo
+    ).padStart(4, "0")}-e${cdEleicaoArquivo}-u.json`;
     const caminhoArquivo = path.join(baseData, nomeArquivo);
 
     const totalAptos = numero(detalhe.QT_APTOS);
@@ -203,8 +212,12 @@ parentPort.on("message", async (workerData) => {
 
     await fs.promises.writeFile(caminhoArquivo, JSON.stringify(jsonCidade));
 
+    logger.info(`[Worker] Arquivo cidade salvo`, {
+      caminho: caminhoArquivo,
+    });
+
     const estadoFileName = `${uf.toLowerCase()}-c${cdCargo.padStart(
-      3,
+      4,
       "0"
     )}-e${cdEleicaoArquivo}-e.json`;
     const estadoPath = path.join(baseData, estadoFileName);
@@ -220,10 +233,13 @@ parentPort.on("message", async (workerData) => {
       dg: detalhe.DT_ELEICAO,
       abr: [],
     };
+
     if (fs.existsSync(estadoPath)) {
       estadoJSON = JSON.parse(await fs.promises.readFile(estadoPath, "utf-8"));
     }
+
     const melhorCand = todos[0];
+
     estadoJSON.abr.push({
       dt: detalhe.DT_ELEICAO || null,
       ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
@@ -248,7 +264,12 @@ parentPort.on("message", async (workerData) => {
         },
       ],
     });
+
     await fs.promises.writeFile(estadoPath, JSON.stringify(estadoJSON));
+
+    logger.info(`[Worker] Arquivo estado atualizado`, {
+      caminho: estadoPath,
+    });
 
     parentPort.postMessage({
       ok: true,
@@ -256,8 +277,17 @@ parentPort.on("message", async (workerData) => {
       nomeEstado: nomeUF,
       cidade: { codTSE: cdMunicipio, nome: String(detalhe.NM_MUNICIPIO || "") },
     });
+
+    logger.info(`[Worker] Processamento concluído`, {
+      municipio: detalhe?.NM_MUNICIPIO,
+      uf,
+    });
   } catch (erro) {
-    logger.error(`[Worker] Erro processamento cidade`, { erro: erro.message });
+    logger.error(`[Worker] Erro processamento cidade`, {
+      erro: erro.message,
+      stack: erro.stack,
+    });
+
     parentPort.postMessage({ ok: false, erro: erro.message });
   }
 });

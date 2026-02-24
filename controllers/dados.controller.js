@@ -1,7 +1,18 @@
-import CODIGOS_ELEICOES from "../shared/codigos_eleicoes.js";
 import path from "path";
 import fs from "fs/promises";
 import logger from "../logger.config.js";
+
+const getCodigosEleicoes = async () => {
+  const filePath = path.join(
+    process.cwd(),
+    "public",
+    "js",
+    "codigos_eleicoes.json"
+  );
+
+  const content = await fs.readFile(filePath, "utf-8");
+  return JSON.parse(content);
+};
 
 export const renderDados = async (req, res) => {
   const publicPath = path.join(process.cwd(), "public");
@@ -18,6 +29,7 @@ export const renderDados = async (req, res) => {
 export const buscarDados = async (req, res) => {
   try {
     const { ano, turno, estado, municipio, cargo } = req.body;
+
     logger.debug("Filtros recebidos:", {
       ano,
       turno,
@@ -31,14 +43,22 @@ export const buscarDados = async (req, res) => {
       return res.status(400).json({ error: "Filtros incompletos" });
     }
 
-    const codEleicao = CODIGOS_ELEICOES[ano]?.turnos[turno];
+    const CODIGOS_ELEICOES = await getCodigosEleicoes();
+
+    const codEleicao = CODIGOS_ELEICOES?.[ano]?.turnos?.[turno];
+
     if (!codEleicao) {
       logger.info(`Eleição não encontrada para ano ${ano} e turno ${turno}`);
       return res.status(404).json({ error: "Eleição não encontrada" });
     }
 
     const uf = estado.toLowerCase();
-    const fileName = `${uf}${municipio}-c${cargo}-e000${codEleicao}-u.json`;
+
+    const fileName = `${uf}${municipio}-c${String(cargo).padStart(
+      4,
+      "0"
+    )}-e${String(codEleicao).padStart(6, "0")}-u.json`;
+
     const filePath = path.join(
       process.cwd(),
       "public",
@@ -66,6 +86,7 @@ export const buscarDados = async (req, res) => {
     logger.info(
       `Dados encontrados para ${ano}-${turno}-${estado}-${municipio}-${cargo}`
     );
+
     return res.json(data);
   } catch (err) {
     logger.error("Erro ao buscar dados:", err);
