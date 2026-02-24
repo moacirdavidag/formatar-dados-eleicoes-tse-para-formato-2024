@@ -10,5 +10,15 @@
       "11": "Prefeito",
       "13": "Vereador"
     }
+  },
+  "2024": {
+    "turnos": {
+      "1": 619,
+      "2": 620
+    },
+    "cargos": {
+      "11": "Prefeito",
+      "13": "Vereador"
+    }
   }
 }

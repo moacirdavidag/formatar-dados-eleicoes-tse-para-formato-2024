@@ -297,9 +297,16 @@ parentPort.on("message", async (workerData) => {
 
     parentPort.postMessage({
       ok: true,
-      estado: uf || null,
+      estado: uf,
       nomeEstado: nomeUF,
-      cidade: { codTSE: cdMunicipio, nome: String(detalhe.NM_MUNICIPIO || "") },
+      cidade: {
+        codTSE: cdMunicipio,
+        nome: String(detalhe.NM_MUNICIPIO || ""),
+        zonas:
+          nrZona && nrZona !== "0"
+            ? [{ [nrZona.padStart(4, "0")]: `${nrZona}ª ZE` }]
+            : [],
+      },
     });
 
     logger.info(`[Worker] Processamento concluído`, {

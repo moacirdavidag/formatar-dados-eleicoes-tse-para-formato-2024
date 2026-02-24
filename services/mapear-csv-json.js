@@ -67,15 +67,27 @@ const appendCidade = (uf, cidadeObj) => {
     cidades = JSON.parse(fs.readFileSync(file, "utf-8"));
   }
 
-  if (!cidades.find((c) => c.codTSE === cidadeObj.codTSE)) {
-    cidades.push(cidadeObj);
-    fs.writeFileSync(file, JSON.stringify(cidades, null, 2));
+  const cidadeExistente = cidades.find((c) => c.codTSE === cidadeObj.codTSE);
 
-    logger.info(`[Mapeamento CSV-JSON] Cidade adicionada`, {
-      uf,
-      codTSE: cidadeObj.codTSE,
-    });
+  if (cidadeExistente) {
+    cidadeExistente.zonas = cidadeExistente.zonas || [];
+    for (const z of cidadeObj.zonas || []) {
+      const key = Object.keys(z)[0];
+      if (!cidadeExistente.zonas.some((cz) => Object.keys(cz)[0] === key)) {
+        cidadeExistente.zonas.push(z);
+      }
+    }
+  } else {
+    cidades.push(cidadeObj);
   }
+
+  fs.writeFileSync(file, JSON.stringify(cidades, null, 2));
+
+  logger.info(`[Mapeamento CSV-JSON] Cidade adicionada/atualizada`, {
+    uf,
+    codTSE: cidadeObj.codTSE,
+    zonas: cidadeObj.zonas,
+  });
 };
 
 const criarPool = () => {

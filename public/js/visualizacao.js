@@ -179,15 +179,15 @@ function renderCandidatos(data, filters) {
     const pageItems = candidatosOrdenados.slice(start, start + pageSize);
     pageItems.forEach((c) => {
       const perc = parseFloat(String(c.pvapn || "0").replace(",", "."));
-      const strokeWidth = 4;
+      const strokeWidth = 6;
       const radius = 50 - strokeWidth / 2;
       const circumference = 2 * Math.PI * radius;
       const dashOffset = circumference * (1 - perc / 100);
       const circleColor =
         (c.e === "s" && c.e !== "n" && c.st !== "Não Eleito") ||
         c.st === "Eleito"
-          ? "#4CAF50"
-          : "#ccc";
+          ? "#41ec7f" : c.st === "2º Turno" ? '#efca44'
+          : "#6b7280";
       const baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${filters.estado}${c.sqcand}_div`;
       const extensions = ["jpg", "jpeg", "png", "webp"];
       const card = document.createElement("div");
@@ -215,7 +215,7 @@ function renderCandidatos(data, filters) {
           ${formatBR(c.vap)} votos (${c.pvap}%)
         </div>
         <div class="candidate-status ${
-          c.e === "s" && c.st !== "Não Eleito" ? "elected" : "not-elected"
+          c.e === "s" && c.st !== "Não Eleito" ? "elected" : c.st === "2º Turno" ? 'second-round' : "not-elected"
         }">
           ${c.st}
         </div>
