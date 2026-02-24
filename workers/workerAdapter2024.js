@@ -271,6 +271,175 @@ parentPort.on("message", async (workerData) => {
       caminho: estadoPath,
     });
 
+    const abrFileName = `${uf.toLowerCase()}-e${cdEleicaoArquivo}-ab.json`;
+    const abrPath = path.join(baseData, abrFileName);
+
+    let abrJSON = {
+      ele: cdEleicao,
+      t: String(detalhe.NR_TURNO),
+      f: "o",
+      dg: detalhe.DT_GERACAO || null,
+      hg: detalhe.HH_GERACAO || null,
+      abr: [],
+    };
+
+    if (fs.existsSync(abrPath)) {
+      try {
+        abrJSON = JSON.parse(await fs.promises.readFile(abrPath, "utf-8"));
+      } catch (e) {
+        abrJSON = {
+          ele: cdEleicao,
+          t: String(detalhe.NR_TURNO),
+          f: "o",
+          dg: detalhe.DT_GERACAO || null,
+          hg: detalhe.HH_GERACAO || null,
+          abr: [],
+        };
+      }
+    }
+
+    const tsCandidates = [
+      "QT_SECOES",
+      "QT_SECOES_TOT",
+      "QT_SECOES_TOTAL",
+      "QT_NUMERO_SECOES",
+      "QT_SECAO",
+    ];
+    const stCandidates = [
+      "QT_SECOES_APURADAS",
+      "QT_SECOES_APUR",
+      "QT_SECOES_TOTALIZADAS",
+      "QT_SECAO_APUR",
+    ];
+    const siCandidates = [
+      "QT_SECOES_INSTALADAS",
+      "QT_SECOES_INST",
+      "QT_SECOES_INSTALACAO",
+    ];
+    const esApuradosCandidates = [
+      "QT_APTOS_APURADOS",
+      "QT_ELEITORES_APURADOS",
+      "QT_APTOS_TOTALIZADOS",
+    ];
+    const esNaoApuradosCandidates = ["QT_APTOS_NAO_APURADOS", "QT_APTOS_NAPUR"];
+    const esnaCandidates = ["QT_APTOS_NAO_APURADOS", "QT_APTOS_NAPUR"];
+    const vvcCandidates = ["QT_VOTOS_A_VOTAVEIS", "QT_VVC"];
+    const vntCandidates = ["QT_VOTOS_NULOS_TECNICO", "QT_VNT"];
+
+    const pickFirstNumber = (obj, keys) => {
+      for (const k of keys) {
+        if (Object.prototype.hasOwnProperty.call(obj, k)) {
+          const val = numero(obj[k]);
+          return val;
+        }
+      }
+      return 0;
+    };
+
+    const ts = pickFirstNumber(detalhe, tsCandidates) || 0;
+    const st = pickFirstNumber(detalhe, stCandidates) || ts;
+    const si = pickFirstNumber(detalhe, siCandidates) || ts;
+    const snt = Math.max(ts - st, 0);
+    const sni = Math.max(ts - si, 0);
+    const sa = st;
+    const sna = 0;
+    const psi = percentual(si, ts);
+    const pst = percentual(st, ts);
+    const psnt = percentual(snt, ts);
+    const psni = percentual(sni, ts);
+    const psa = percentual(sa, si);
+    const psna = percentual(sna, si);
+
+    const estFromDetalhe = pickFirstNumber(detalhe, esApuradosCandidates);
+    const est =
+      estFromDetalhe ||
+      (ts > 0 ? Math.round((totalAptos * st) / ts) : totalAptos);
+    const esi = est;
+    const esnt = Math.max(totalAptos - est, 0);
+    const esni = 0;
+    const esa = est;
+    const esna = pickFirstNumber(detalhe, esnaCandidates) || 0;
+    const pesi = percentual(esi, totalAptos);
+    const pest = percentual(est, totalAptos);
+    const pesnt = percentual(esnt, totalAptos);
+    const pesni = percentual(esni, totalAptos);
+    const pesan = percentual(esa, totalAptos);
+    const pesna = percentual(esna, totalAptos);
+
+    const c = String(comparecimento);
+    const pc = formatPct(percentual(comparecimento, esi || totalAptos));
+    const pcn = formatPctN(percentual(comparecimento, esi || totalAptos));
+    const a = String(abstencao);
+    const pa = formatPct(percentual(abstencao, esi || totalAptos));
+    const pan = formatPctN(percentual(abstencao, esi || totalAptos));
+
+    const abrMunicipio = {
+      and: "f",
+      tpabr: "mun",
+      cdabr: String(cdMunicipio),
+      dt: detalhe.DT_ULTIMA_TOTALIZACAO || null,
+      ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
+      s: {
+        ts: String(ts),
+        st: String(st),
+        pst: formatPct(pst),
+        pstn: formatPctN(pst),
+        snt: String(snt),
+        psnt: formatPct(psnt),
+        psntn: formatPctN(psnt),
+        si: String(si),
+        psi: formatPct(psi),
+        psin: formatPctN(psi),
+        sni: String(sni),
+        psni: formatPct(psni),
+        psnin: formatPctN(psni),
+        sa: String(sa),
+        psa: formatPct(psa),
+        psan: formatPctN(psa),
+        sna: String(sna),
+        psna: formatPct(psna),
+        psnan: formatPctN(psna),
+      },
+      e: {
+        te: String(totalAptos),
+        est: String(est),
+        pest: formatPct(pest),
+        pestn: formatPctN(pest),
+        esnt: String(esnt),
+        pesnt: formatPct(pesnt),
+        pesntn: formatPctN(pesnt),
+        esi: String(esi),
+        pesi: formatPct(pesi),
+        pesin: formatPctN(pesi),
+        esni: String(esni),
+        pesni: formatPct(pesni),
+        pesnin: formatPctN(pesni),
+        esa: String(esa),
+        pesa: formatPct(pesan),
+        pesan: formatPctN(pesan),
+        esna: String(esna),
+        pesna: formatPct(pesna),
+        pesnan: formatPctN(pesna),
+        c,
+        pc,
+        pcn,
+        a,
+        pa,
+        pan,
+      },
+    };
+
+    abrJSON.abr = Array.isArray(abrJSON.abr)
+      ? abrJSON.abr.filter((a) => a.cdabr !== String(cdMunicipio))
+      : [];
+    abrJSON.abr.push(abrMunicipio);
+
+    await fs.promises.writeFile(abrPath, JSON.stringify(abrJSON));
+
+    logger.info(`[Worker] Arquivo abrangencia atualizado`, {
+      caminho: abrPath,
+    });
+
     parentPort.postMessage({
       ok: true,
       estado: uf || null,

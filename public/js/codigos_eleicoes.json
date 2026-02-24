@@ -1,14 +1,4 @@
 {
-  "2018": {
-    "turnos": {
-      "1": 297
-    },
-    "cargos": {
-      "3": "Governador",
-      "5": "Senador",
-      "6": "Deputado Federal"
-    }
-  },
   "2020": {
     "turnos": {
       "1": 426,
@@ -19,17 +9,6 @@
     "cargos": {
       "11": "Prefeito",
       "13": "Vereador"
-    }
-  },
-  "2022": {
-    "turnos": {
-      "1": 546,
-      "2": 547
-    },
-    "cargos": {
-      "3": "Governador",
-      "5": "Senador",
-      "6": "Deputado Federal"
     }
   }
 }
