@@ -245,51 +245,84 @@ parentPort.on("message", async (workerData) => {
       "0"
     )}-e${cdEleicaoArquivo}-e.json`;
     const estadoPath = path.join(baseData, estadoFileName);
+    const lockPath = `${estadoPath}.lock`;
 
-    let estadoJSON = {
-      ele: cdEleicao,
-      cdabr: uf.toLowerCase(),
-      nmabr: nomeUF,
-      t: detalhe.NR_TURNO,
-      f: "o",
-      cdcar: cdCargo.padStart(3, "0"),
-      nmcar: texto(detalhe.DS_CARGO),
-      dg: detalhe.DT_ELEICAO,
-      abr: [],
+    const acquireLock = async () => {
+      while (true) {
+        try {
+          const fd = await fs.promises.open(lockPath, "wx");
+          await fd.close();
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 10));
+        }
+      }
     };
 
-    if (fs.existsSync(estadoPath)) {
-      estadoJSON = JSON.parse(await fs.promises.readFile(estadoPath, "utf-8"));
+    const releaseLock = async () => {
+      try {
+        await fs.promises.unlink(lockPath);
+      } catch {}
+    };
+
+    await acquireLock();
+
+    try {
+      let estadoJSON = {
+        ele: cdEleicao,
+        cdabr: uf.toLowerCase(),
+        nmabr: nomeUF,
+        t: detalhe.NR_TURNO,
+        f: "o",
+        cdcar: cdCargo.padStart(3, "0"),
+        nmcar: texto(detalhe.DS_CARGO),
+        dg: detalhe.DT_ELEICAO,
+        abr: [],
+      };
+
+      try {
+        const content = await fs.promises.readFile(estadoPath, "utf-8");
+        estadoJSON = JSON.parse(content);
+      } catch {}
+
+      const melhorCand = todos[0];
+
+      estadoJSON.abr = (estadoJSON.abr || []).filter(
+        (a) => a.cdabr !== String(cdMunicipio)
+      );
+
+      estadoJSON.abr.push({
+        dt: detalhe.DT_ELEICAO || null,
+        ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
+        tpabr: "mu",
+        cdabr: String(cdMunicipio),
+        nmabr: texto(detalhe.NM_MUNICIPIO),
+        tvap: String(melhorCand.vap),
+        scv: "n",
+        esae: melhorCand.e === "s" ? "n" : "s",
+        mnae: [],
+        cand: [
+          {
+            n: melhorCand.n,
+            sqcand: melhorCand.sqcand,
+            nm: melhorCand.nm,
+            nmu: melhorCand.nmu,
+            sgp: melhorCand.sgp || null,
+            com: melhorCand.st || "",
+            vap: melhorCand.vap,
+            seq: melhorCand.seq,
+            vs: melhorCand.vs,
+          },
+        ],
+      });
+
+      const tmpPath = `${estadoPath}.tmp`;
+
+      await fs.promises.writeFile(tmpPath, JSON.stringify(estadoJSON));
+      await fs.promises.rename(tmpPath, estadoPath);
+    } finally {
+      await releaseLock();
     }
-
-    const melhorCand = todos[0];
-
-    estadoJSON.abr.push({
-      dt: detalhe.DT_ELEICAO || null,
-      ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
-      tpabr: "mu",
-      cdabr: String(cdMunicipio),
-      nmabr: texto(detalhe.NM_MUNICIPIO),
-      tvap: String(melhorCand.vap),
-      scv: "n",
-      esae: melhorCand.e === "s" ? "n" : "s",
-      mnae: [],
-      cand: [
-        {
-          n: melhorCand.n,
-          sqcand: melhorCand.sqcand,
-          nm: melhorCand.nm,
-          nmu: melhorCand.nmu,
-          sgp: melhorCand.sgp || null,
-          com: melhorCand.st || "",
-          vap: melhorCand.vap,
-          seq: melhorCand.seq,
-          vs: melhorCand.vs,
-        },
-      ],
-    });
-
-    await fs.promises.writeFile(estadoPath, JSON.stringify(estadoJSON));
 
     logger.info(`[Worker] Arquivo estado atualizado`, {
       caminho: estadoPath,
