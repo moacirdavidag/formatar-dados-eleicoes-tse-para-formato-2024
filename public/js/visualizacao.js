@@ -196,10 +196,12 @@ function renderCandidatos(data, filters) {
           ? "#efca44"
           : "#6b7280";
 
-      let baseImg = "";
+      let baseImg = null;
 
       if (String(filters.ano) === "2024") {
         baseImg = `https://monitor-static.poder360.com.br/static?path=politicos_do_brasil/fotos/2024/${filters.municipio}/candidato${c.sqcand}`;
+      } else if (Number(filters.ano) < 2022 && Number(filters.ano) !== 2020) {
+        baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/${filters.ano}/${filters.estado}/${c.sqcand}`;
       } else {
         baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${filters.estado}${c.sqcand}_div`;
       }

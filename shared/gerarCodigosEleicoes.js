@@ -7,7 +7,8 @@ const MAPEAMENTO_CARGOS_ELEICOES = {
   "0003": "Governador",
   "0005": "Senador",
   "0006": "Deputado Federal",
-  "0008": "Deputado Estadual/Distrital",
+  "0007": "Deputado Estadual",
+  "0008": "Deputado Distrital",
   "0011": "Prefeito",
   "0013": "Vereador",
 };
