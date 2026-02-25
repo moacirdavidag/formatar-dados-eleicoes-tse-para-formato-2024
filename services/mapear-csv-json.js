@@ -90,7 +90,7 @@ const appendCidade = (uf, cidadeObj) => {
   });
 };
 
-const criarPool = () => {
+const criarPool = (anoEleicao) => {
   logger.info(`[Mapeamento CSV-JSON] Criando pool de workers`, {
     totalWorkers: WORKERS,
   });
@@ -98,10 +98,12 @@ const criarPool = () => {
   const workers = [];
 
   for (let i = 0; i < WORKERS; i++) {
-    const worker = new Worker(
-      new URL("../workers/workerAdapter2024.js", import.meta.url),
-      { type: "module" }
-    );
+    const workerPath =
+      Number(anoEleicao) === 2024
+        ? new URL("../workers/workerAdapterEA20.js", import.meta.url)
+        : new URL("../workers/workerAdapterEA10.js", import.meta.url);
+
+    const worker = new Worker(workerPath, { type: "module" });
 
     workers.push({ worker, ocupado: false });
   }
@@ -177,7 +179,7 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
       total: cidades.size,
     });
 
-    const pool = criarPool();
+    const pool = criarPool(anoEleicao);
 
     const fila = Array.from(cidades.entries()).map(([idCidade, cidade]) => ({
       idCidade,

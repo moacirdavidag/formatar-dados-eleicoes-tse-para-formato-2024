@@ -168,30 +168,47 @@ function renderCandidatos(data, filters) {
         });
       });
   }
+
   const candidatosOrdenados = candidatos.sort(
     (a, b) => parseInt(a.seq || 0, 10) - parseInt(b.seq || 0, 10)
   );
+
   const pageSize = 4;
   let currentPage = 1;
+
   const renderPage = () => {
     candidatesEl.innerHTML = "";
     const start = (currentPage - 1) * pageSize;
     const pageItems = candidatosOrdenados.slice(start, start + pageSize);
+
     pageItems.forEach((c) => {
       const perc = parseFloat(String(c.pvapn || "0").replace(",", "."));
       const strokeWidth = 6;
       const radius = 50 - strokeWidth / 2;
       const circumference = 2 * Math.PI * radius;
       const dashOffset = circumference * (1 - perc / 100);
+
       const circleColor =
         (c.e === "s" && c.e !== "n" && c.st !== "Não Eleito") ||
         c.st === "Eleito"
-          ? "#41ec7f" : c.st === "2º Turno" ? '#efca44'
+          ? "#41ec7f"
+          : c.st === "2º Turno"
+          ? "#efca44"
           : "#6b7280";
-      const baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${filters.estado}${c.sqcand}_div`;
+
+      let baseImg = "";
+
+      if (String(filters.ano) === "2024") {
+        baseImg = `https://monitor-static.poder360.com.br/static?path=politicos_do_brasil/fotos/2024/${filters.municipio}/candidato${c.sqcand}`;
+      } else {
+        baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${filters.estado}${c.sqcand}_div`;
+      }
+
       const extensions = ["jpg", "jpeg", "png", "webp"];
+
       const card = document.createElement("div");
       card.classList.add("candidate-card");
+
       card.innerHTML = `
         <div class="candidate-img-wrapper">
           <img alt="${c.nmu}" />
@@ -215,13 +232,19 @@ function renderCandidatos(data, filters) {
           ${formatBR(c.vap)} votos (${c.pvap}%)
         </div>
         <div class="candidate-status ${
-          c.e === "s" && c.st !== "Não Eleito" ? "elected" : c.st === "2º Turno" ? 'second-round' : "not-elected"
+          c.e === "s" && c.st !== "Não Eleito"
+            ? "elected"
+            : c.st === "2º Turno"
+            ? "second-round"
+            : "not-elected"
         }">
           ${c.st}
         </div>
       `;
+
       const img = card.querySelector("img");
       let index = 0;
+
       const tryLoad = () => {
         if (index >= extensions.length) {
           img.src = "/img/placeholder.png";
@@ -229,18 +252,24 @@ function renderCandidatos(data, filters) {
         }
         img.src = `${baseImg}.${extensions[index]}`;
       };
+
       img.onerror = () => {
         index++;
         tryLoad();
+        console.log(`URL Imagem: ${img.src}`);
       };
+
       tryLoad();
       candidatesEl.appendChild(card);
     });
+
     const renderPagination = () => {
       const totalPages = Math.ceil(candidatosOrdenados.length / pageSize);
       paginationEl.innerHTML = "";
       if (totalPages <= 1) return;
+
       const maxVisible = 5;
+
       const createBtn = (label, page, disabled = false, active = false) => {
         const btn = document.createElement("button");
         btn.innerHTML = label;
@@ -254,37 +283,47 @@ function renderCandidatos(data, filters) {
         };
         return btn;
       };
+
       const createDots = () => {
         const span = document.createElement("span");
         span.className = "px-2 align-self-center";
         span.textContent = "...";
         return span;
       };
+
       paginationEl.appendChild(
         createBtn("«", currentPage - 1, currentPage === 1)
       );
+
       let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
       let end = Math.min(totalPages, start + maxVisible - 1);
+
       if (end - start < maxVisible - 1)
         start = Math.max(1, end - maxVisible + 1);
+
       if (start > 1) {
         paginationEl.appendChild(createBtn(1, 1, false, currentPage === 1));
         if (start > 2) paginationEl.appendChild(createDots());
       }
+
       for (let i = start; i <= end; i++)
         paginationEl.appendChild(createBtn(i, i, false, i === currentPage));
+
       if (end < totalPages) {
         if (end < totalPages - 1) paginationEl.appendChild(createDots());
         paginationEl.appendChild(
           createBtn(totalPages, totalPages, false, currentPage === totalPages)
         );
       }
+
       paginationEl.appendChild(
         createBtn("»", currentPage + 1, currentPage === totalPages)
       );
     };
+
     renderPagination();
   };
+
   renderPage();
 }
 
