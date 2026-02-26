@@ -125,14 +125,15 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
     logger.info(`[Mapeamento CSV-JSON] Indexando detalhes`);
 
     const detalheIndex = new Map();
+    const norm = (v) => String(Number(v || 0));
 
     for (const d of detalhe) {
       const chave = [
-        d.ANO_ELEICAO,
-        d.CD_MUNICIPIO,
-        d.NR_ZONA,
-        d.CD_CARGO,
-        d.NR_TURNO,
+        norm(d.ANO_ELEICAO),
+        norm(d.CD_MUNICIPIO),
+        norm(d.NR_ZONA),
+        norm(d.CD_CARGO),
+        norm(d.NR_TURNO),
       ].join("_");
 
       detalheIndex.set(chave, d);
@@ -144,11 +145,11 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
 
     for (const cand of candidatos) {
       const chave = [
-        cand.ANO_ELEICAO,
-        cand.CD_MUNICIPIO,
-        cand.NR_ZONA,
-        cand.CD_CARGO,
-        cand.NR_TURNO,
+        norm(cand.ANO_ELEICAO),
+        norm(cand.CD_MUNICIPIO),
+        norm(cand.NR_ZONA),
+        norm(cand.CD_CARGO),
+        norm(cand.NR_TURNO),
       ].join("_");
 
       const det = detalheIndex.get(chave);

@@ -116,6 +116,7 @@ async function setEstado(uf) {
   if (!uf) return;
   const resp = await fetch(`/cidades_${uf}.json`);
   const cidades = await resp.json();
+  console.log(`Total cidades: ${cidades.length}`)
   cidades.sort((a, b) => a.nome.localeCompare(b.nome));
   cidades.forEach((c) => {
     const opt = document.createElement("option");
