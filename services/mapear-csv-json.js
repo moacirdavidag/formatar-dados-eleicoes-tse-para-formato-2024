@@ -8,32 +8,6 @@ import { gerarCodigosEleicoes } from "../shared/gerarCodigosEleicoes.js";
 
 const WORKERS = 2;
 
-const lerCSV = (arquivo) =>
-  new Promise((resolve, reject) => {
-    logger.info(`[Mapeamento CSV-JSON] Lendo CSV`, { arquivo });
-
-    const dados = [];
-
-    fs.createReadStream(arquivo)
-      .pipe(iconv.decodeStream("win1252"))
-      .pipe(csvParser({ separator: ";", quote: '"' }))
-      .on("data", (row) => dados.push(row))
-      .on("end", () => {
-        logger.info(`[Mapeamento CSV-JSON] CSV carregado`, {
-          arquivo,
-          totalRegistros: dados.length,
-        });
-        resolve(dados);
-      })
-      .on("error", (err) => {
-        logger.error(`[Mapeamento CSV-JSON] Erro ao ler CSV`, {
-          arquivo,
-          erro: err,
-        });
-        reject(err);
-      });
-  });
-
 const appendEstado = (estadoSigla, nomeEstado) => {
   const dir = path.join(process.cwd(), "public");
   fs.mkdirSync(dir, { recursive: true });
@@ -111,6 +85,36 @@ const criarPool = (anoEleicao) => {
   return workers;
 };
 
+const streamDetalhe = (arquivo) =>
+  new Promise((resolve, reject) => {
+    logger.info(`[Mapeamento CSV-JSON] Indexando detalhe`, { arquivo });
+
+    const detalheIndex = new Map();
+    const norm = (v) => String(Number(v || 0));
+
+    fs.createReadStream(arquivo)
+      .pipe(iconv.decodeStream("win1252"))
+      .pipe(csvParser({ separator: ";", quote: '"' }))
+      .on("data", (d) => {
+        const chave = [
+          norm(d.ANO_ELEICAO),
+          norm(d.CD_MUNICIPIO),
+          norm(d.NR_ZONA),
+          norm(d.CD_CARGO),
+          norm(d.NR_TURNO),
+        ].join("_");
+
+        detalheIndex.set(chave, d);
+      })
+      .on("end", () => {
+        logger.info(`[Mapeamento CSV-JSON] Detalhe indexado`, {
+          total: detalheIndex.size,
+        });
+        resolve(detalheIndex);
+      })
+      .on("error", reject);
+  });
+
 const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
   try {
     logger.info(`[Mapeamento CSV-JSON] Iniciando processamento`, {
@@ -119,83 +123,24 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
 
     const { caminhoDetalhe, caminhoCandidatos } = caminhos;
 
-    const detalhe = await lerCSV(caminhoDetalhe);
-    const candidatos = await lerCSV(caminhoCandidatos);
-
-    logger.info(`[Mapeamento CSV-JSON] Indexando detalhes`);
-
-    const detalheIndex = new Map();
-    const norm = (v) => String(Number(v || 0));
-
-    for (const d of detalhe) {
-      const chave = [
-        norm(d.ANO_ELEICAO),
-        norm(d.CD_MUNICIPIO),
-        norm(d.NR_ZONA),
-        norm(d.CD_CARGO),
-        norm(d.NR_TURNO),
-      ].join("_");
-
-      detalheIndex.set(chave, d);
-    }
-
-    logger.info(`[Mapeamento CSV-JSON] Agrupando candidatos por cidade`);
-
-    const cidades = new Map();
-
-    for (const cand of candidatos) {
-      const chave = [
-        norm(cand.ANO_ELEICAO),
-        norm(cand.CD_MUNICIPIO),
-        norm(cand.NR_ZONA),
-        norm(cand.CD_CARGO),
-        norm(cand.NR_TURNO),
-      ].join("_");
-
-      const det = detalheIndex.get(chave);
-
-      if (!det) {
-        logger.error(`[Mapeamento CSV-JSON] Detalhe não encontrado`, cand);
-        continue;
-      }
-
-      const idCidade = [
-        cand.CD_ELEICAO,
-        cand.CD_MUNICIPIO,
-        cand.CD_CARGO,
-        cand.NR_TURNO,
-      ].join("_");
-
-      if (!cidades.has(idCidade)) {
-        cidades.set(idCidade, {
-          detalhe: { ...det },
-          candidatos: [],
-        });
-      }
-
-      cidades.get(idCidade).candidatos.push(cand);
-    }
-
-    logger.info(`[Mapeamento CSV-JSON] Total de arquivos para processar`, {
-      total: cidades.size,
-    });
+    const detalheIndex = await streamDetalhe(caminhoDetalhe);
 
     const pool = criarPool(anoEleicao);
 
-    const fila = Array.from(cidades.entries()).map(([idCidade, cidade]) => ({
-      idCidade,
-      cidade,
-    }));
+    const cidades = new Map();
+    const norm = (v) => String(Number(v || 0));
 
-    const totalCidades = fila.length;
+    let totalCidades = 0;
     let cidadesProcessadas = 0;
 
-    const processarFila = () => {
-      for (const slot of pool) {
-        if (slot.ocupado) continue;
+    const enviarWorker = (item) => {
+      return new Promise((resolve) => {
+        const slot = pool.find((s) => !s.ocupado);
 
-        const item = fila.shift();
-        if (!item) return;
+        if (!slot) {
+          setTimeout(() => enviarWorker(item).then(resolve), 10);
+          return;
+        }
 
         slot.ocupado = true;
 
@@ -215,11 +160,6 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
                 cidade: msg?.cidade,
               });
 
-            logger.info(`[Mapeamento CSV-JSON] Cidade processada`, {
-              idCidade: item.idCidade,
-              progresso: `${cidadesProcessadas}/${totalCidades}`,
-            });
-
             if (msg.estado && msg.nomeEstado)
               appendEstado(msg.estado, msg.nomeEstado);
 
@@ -231,24 +171,80 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
             });
           }
 
-          processarFila();
+          resolve();
         });
 
         slot.worker.postMessage(item.cidade);
-      }
+      });
     };
 
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        const ocupados = pool.some((p) => p.ocupado);
+    await new Promise((resolve, reject) => {
+      const stream = fs
+        .createReadStream(caminhoCandidatos)
+        .pipe(iconv.decodeStream("win1252"))
+        .pipe(csvParser({ separator: ";", quote: '"' }));
 
-        if (!ocupados && fila.length === 0) {
-          clearInterval(check);
-          resolve();
+      stream.on("data", async (cand) => {
+        stream.pause();
+
+        const chave = [
+          norm(cand.ANO_ELEICAO),
+          norm(cand.CD_MUNICIPIO),
+          norm(cand.NR_ZONA),
+          norm(cand.CD_CARGO),
+          norm(cand.NR_TURNO),
+        ].join("_");
+
+        const det = detalheIndex.get(chave);
+
+        if (!det) {
+          logger.error(`[Mapeamento CSV-JSON] Detalhe não encontrado`, cand);
+          stream.resume();
+          return;
         }
-      }, 200);
 
-      processarFila();
+        const idCidade = [
+          cand.CD_ELEICAO,
+          cand.CD_MUNICIPIO,
+          cand.CD_CARGO,
+          cand.NR_TURNO,
+        ].join("_");
+
+        if (!cidades.has(idCidade)) {
+          cidades.set(idCidade, {
+            detalhe: { ...det },
+            candidatos: [],
+          });
+          totalCidades++;
+        }
+
+        cidades.get(idCidade).candidatos.push(cand);
+
+        if (cidades.get(idCidade).candidatos.length >= 1000) {
+          const cidade = cidades.get(idCidade);
+          cidades.delete(idCidade);
+
+          await enviarWorker({
+            idCidade,
+            cidade,
+          });
+        }
+
+        stream.resume();
+      });
+
+      stream.on("end", async () => {
+        for (const [idCidade, cidade] of cidades.entries()) {
+          await enviarWorker({
+            idCidade,
+            cidade,
+          });
+        }
+
+        resolve();
+      });
+
+      stream.on("error", reject);
     });
 
     logger.info(`[Mapeamento CSV-JSON] Encerrando workers`);
