@@ -7,6 +7,7 @@ import logger from "../logger.config.js";
 import { gerarCodigosEleicoes } from "../shared/gerarCodigosEleicoes.js";
 
 const WORKERS = 2;
+const BATCH_SIZE = 500;
 
 const appendEstado = (estadoSigla, nomeEstado) => {
   const dir = path.join(process.cwd(), "public");
@@ -124,57 +125,72 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
     const { caminhoDetalhe, caminhoCandidatos } = caminhos;
 
     const detalheIndex = await streamDetalhe(caminhoDetalhe);
-
     const pool = criarPool(anoEleicao);
 
-    const cidades = new Map();
     const norm = (v) => String(Number(v || 0));
+    const cidades = new Map();
 
     let totalCidades = 0;
     let cidadesProcessadas = 0;
 
-    const enviarWorker = (item) => {
-      return new Promise((resolve) => {
-        const slot = pool.find((s) => !s.ocupado);
+    const enviarWorker = (item) =>
+      new Promise((resolve) => {
+        const tentar = () => {
+          const slot = pool.find((s) => !s.ocupado);
 
-        if (!slot) {
-          setTimeout(() => enviarWorker(item).then(resolve), 10);
-          return;
-        }
-
-        slot.ocupado = true;
-
-        logger.info(`[Mapeamento CSV-JSON] Enviando cidade para worker`, {
-          idCidade: item.idCidade,
-        });
-
-        slot.worker.once("message", (msg) => {
-          slot.ocupado = false;
-
-          if (msg?.ok) {
-            cidadesProcessadas++;
-
-            if (callback)
-              callback(cidadesProcessadas, totalCidades, {
-                estado: msg?.estado,
-                cidade: msg?.cidade,
-              });
-
-            if (msg.estado && msg.nomeEstado)
-              appendEstado(msg.estado, msg.nomeEstado);
-
-            if (msg.cidade && msg.estado) appendCidade(msg.estado, msg.cidade);
-          } else {
-            logger.error(`[Mapeamento CSV-JSON] Erro cidade`, {
-              idCidade: item.idCidade,
-              erro: msg?.erro,
-            });
+          if (!slot) {
+            setImmediate(tentar);
+            return;
           }
 
-          resolve();
-        });
+          slot.ocupado = true;
 
-        slot.worker.postMessage(item.cidade);
+          logger.info(`[Mapeamento CSV-JSON] Enviando cidade para worker`, {
+            idCidade: item.idCidade,
+          });
+
+          slot.worker.once("message", (msg) => {
+            slot.ocupado = false;
+
+            if (msg?.ok) {
+              cidadesProcessadas++;
+
+              if (callback)
+                callback(cidadesProcessadas, totalCidades, {
+                  estado: msg?.estado,
+                  cidade: msg?.cidade,
+                });
+
+              if (msg.estado && msg.nomeEstado)
+                appendEstado(msg.estado, msg.nomeEstado);
+
+              if (msg.cidade && msg.estado)
+                appendCidade(msg.estado, msg.cidade);
+            } else {
+              logger.error(`[Mapeamento CSV-JSON] Erro cidade`, {
+                idCidade: item.idCidade,
+                erro: msg?.erro,
+              });
+            }
+
+            resolve();
+          });
+
+          slot.worker.postMessage(item.cidade);
+        };
+
+        tentar();
+      });
+
+    const flushCidade = async (idCidade) => {
+      const cidade = cidades.get(idCidade);
+      if (!cidade) return;
+
+      cidades.delete(idCidade);
+
+      await enviarWorker({
+        idCidade,
+        cidade,
       });
     };
 
@@ -187,60 +203,55 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
       stream.on("data", async (cand) => {
         stream.pause();
 
-        const chave = [
-          norm(cand.ANO_ELEICAO),
-          norm(cand.CD_MUNICIPIO),
-          norm(cand.NR_ZONA),
-          norm(cand.CD_CARGO),
-          norm(cand.NR_TURNO),
-        ].join("_");
+        try {
+          const chave = [
+            norm(cand.ANO_ELEICAO),
+            norm(cand.CD_MUNICIPIO),
+            norm(cand.NR_ZONA),
+            norm(cand.CD_CARGO),
+            norm(cand.NR_TURNO),
+          ].join("_");
 
-        const det = detalheIndex.get(chave);
+          const det = detalheIndex.get(chave);
 
-        if (!det) {
-          logger.error(`[Mapeamento CSV-JSON] Detalhe não encontrado`, cand);
-          stream.resume();
-          return;
-        }
+          if (!det) {
+            logger.error(`[Mapeamento CSV-JSON] Detalhe não encontrado`, cand);
+            stream.resume();
+            return;
+          }
 
-        const idCidade = [
-          cand.CD_ELEICAO,
-          cand.CD_MUNICIPIO,
-          cand.CD_CARGO,
-          cand.NR_TURNO,
-        ].join("_");
+          const idCidade = [
+            cand.CD_ELEICAO,
+            cand.CD_MUNICIPIO,
+            cand.CD_CARGO,
+            cand.NR_TURNO,
+          ].join("_");
 
-        if (!cidades.has(idCidade)) {
-          cidades.set(idCidade, {
-            detalhe: { ...det },
-            candidatos: [],
-          });
-          totalCidades++;
-        }
+          if (!cidades.has(idCidade)) {
+            cidades.set(idCidade, {
+              detalhe: { ...det },
+              candidatos: [],
+            });
+            totalCidades++;
+          }
 
-        cidades.get(idCidade).candidatos.push(cand);
+          const cidadeObj = cidades.get(idCidade);
+          cidadeObj.candidatos.push(cand);
 
-        if (cidades.get(idCidade).candidatos.length >= 1000) {
-          const cidade = cidades.get(idCidade);
-          cidades.delete(idCidade);
-
-          await enviarWorker({
-            idCidade,
-            cidade,
-          });
+          if (cidadeObj.candidatos.length >= BATCH_SIZE) {
+            await flushCidade(idCidade);
+          }
+        } catch (err) {
+          logger.error(`[Mapeamento CSV-JSON] Erro processamento linha`, err);
         }
 
         stream.resume();
       });
 
       stream.on("end", async () => {
-        for (const [idCidade, cidade] of cidades.entries()) {
-          await enviarWorker({
-            idCidade,
-            cidade,
-          });
+        for (const idCidade of cidades.keys()) {
+          await flushCidade(idCidade);
         }
-
         resolve();
       });
 

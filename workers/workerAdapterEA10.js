@@ -34,7 +34,6 @@ const sqValido = (sq) => {
 
 const gerarSq = (cand, detalhe) => {
   const raw = cand?.SQ_CANDIDATO;
-
   if (sqValido(raw)) return String(raw);
 
   const alt = cand?.SQ_CANDIDATO_ORIGINAL;
@@ -50,7 +49,6 @@ const gerarSq = (cand, detalhe) => {
     .join("");
 
   if (base) return base;
-
   return String(cand?.NR_CANDIDATO || Date.now());
 };
 
@@ -65,7 +63,9 @@ parentPort.on("message", async (workerData) => {
       turno: detalhe?.NR_TURNO,
     });
 
-    const uf = String(detalhe.SG_UF || "").trim().toUpperCase();
+    const uf = String(detalhe.SG_UF || "")
+      .trim()
+      .toUpperCase();
     const nomeUF = ESTADOS_BR[uf] || null;
     const cdMunicipio = detalhe.CD_MUNICIPIO;
     const nrZona = String(detalhe.NR_ZONA || detalhe.CD_ZONA || "0");
@@ -73,7 +73,7 @@ parentPort.on("message", async (workerData) => {
     const abrangencia = normalizarAbr(detalhe.TP_ABRANGENCIA);
     const cdCargo = String(detalhe.CD_CARGO);
     const cdEleicao = String(detalhe.CD_ELEICAO);
-    const cdEleicaoArquivo = String(detalhe.CD_ELEICAO).padStart(6, "0");
+    const cdEleicaoArquivo = cdEleicao.padStart(6, "0");
 
     const baseData = path.join(
       process.cwd(),
@@ -83,18 +83,21 @@ parentPort.on("message", async (workerData) => {
       "dados",
       uf.toLowerCase()
     );
-    fs.mkdirSync(baseData, { recursive: true });
+
+    await fs.promises.mkdir(baseData, { recursive: true });
 
     const nomeArquivoCidade = `${uf.toLowerCase()}${cdMunicipio}-c${cdCargo.padStart(
       4,
       "0"
     )}-e${cdEleicaoArquivo}-u.json`;
+
     const caminhoArquivoCidade = path.join(baseData, nomeArquivoCidade);
 
     const nomeArquivoZona = `${uf.toLowerCase()}${cdMunicipio}-z${nrZona.padStart(
       4,
       "0"
     )}-c${cdCargo.padStart(4, "0")}-e${cdEleicaoArquivo}-u.json`;
+
     const caminhoArquivoZona = path.join(baseData, nomeArquivoZona);
 
     const totalAptos = numero(detalhe.QT_APTOS);
@@ -107,48 +110,58 @@ parentPort.on("message", async (workerData) => {
 
     const candidatosMap = new Map();
 
-    for (const cand of candidatos) {
+    for (let i = 0; i < candidatos.length; i++) {
+      const cand = candidatos[i];
       const sq = gerarSq(cand, detalhe);
       const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
 
-      if (!candidatosMap.has(sq)) {
+      const existente = candidatosMap.get(sq);
+
+      if (!existente) {
         candidatosMap.set(sq, {
           ...cand,
           SQ_CANDIDATO: sq,
           QT_VOTOS_NOMINAIS_VALIDOS: votosCand,
         });
       } else {
-        const existente = candidatosMap.get(sq);
         existente.QT_VOTOS_NOMINAIS_VALIDOS += votosCand;
       }
     }
 
-    const votosValidos = Array.from(candidatosMap.values()).reduce(
-      (s, c) => s + numero(c.QT_VOTOS_NOMINAIS_VALIDOS),
-      0
-    );
+    let votosValidos = 0;
+
+    for (const c of candidatosMap.values()) {
+      votosValidos += numero(c.QT_VOTOS_NOMINAIS_VALIDOS);
+    }
 
     const totalVotos = votosValidos + votosBrancos + votosNulos;
 
     const partidos = new Map();
+    const todos = [];
 
     for (const cand of candidatosMap.values()) {
       const nrPartido = cand.NR_PARTIDO || "0";
 
-      if (!partidos.has(nrPartido)) {
-        partidos.set(nrPartido, {
+      let partido = partidos.get(nrPartido);
+
+      if (!partido) {
+        partido = {
           n: nrPartido,
           sg: texto(cand.SG_PARTIDO).toUpperCase(),
           nm: texto(cand.NM_PARTIDO),
           cand: [],
-        });
+          total: 0,
+        };
+        partidos.set(nrPartido, partido);
       }
 
       const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
+      partido.total += votosCand;
+
       const pctCand = percentual(votosCand, votosValidos);
       const situacao = texto(cand.DS_SIT_TOT_TURNO);
 
-      partidos.get(nrPartido).cand.push({
+      const obj = {
         n: cand.NR_CANDIDATO,
         sqcand: cand.SQ_CANDIDATO,
         nm: texto(cand.NM_CANDIDATO),
@@ -163,22 +176,22 @@ parentPort.on("message", async (workerData) => {
         pvap: formatPct(pctCand),
         pvapn: formatPctN(pctCand),
         vs: [],
-      });
+      };
+
+      partido.cand.push(obj);
+      todos.push(obj);
     }
 
-    const todos = [];
+    todos.sort((a, b) => Number(b.vap) - Number(a.vap));
 
-    for (const [, p] of partidos) {
-      for (const c of p.cand) todos.push(c);
+    for (let i = 0; i < todos.length; i++) {
+      todos[i].seq = String(i + 1);
     }
 
-    todos.sort((a, b) => numero(b.vap) - numero(a.vap));
-    todos.forEach((c, idx) => (c.seq = String(idx + 1)));
+    const agr = [];
 
-    const agr = Array.from(partidos.values()).map((p) => {
-      const totalPartido = p.cand.reduce((s, c) => s + numero(c.vap), 0);
-
-      return {
+    for (const p of partidos.values()) {
+      agr.push({
         n: null,
         nm: p.nm,
         tp: "i",
@@ -190,15 +203,15 @@ parentPort.on("message", async (workerData) => {
             sg: p.sg,
             nm: p.nm,
             nfed: "",
-            tvtn: String(totalPartido),
+            tvtn: String(p.total),
             tvtl: "0",
             tval: "0",
-            tvan: String(totalPartido),
+            tvan: String(p.total),
             cand: p.cand,
           },
         ],
-      };
-    });
+      });
+    }
 
     const pctComp = percentual(comparecimento, totalAptos);
     const pctAbs = percentual(abstencao, totalAptos);
@@ -209,7 +222,7 @@ parentPort.on("message", async (workerData) => {
     const existeEleito = todos.some((c) => c.e === "s");
 
     const jsonBase = {
-      ele: String(cdEleicao),
+      ele: cdEleicao,
       t: String(detalhe.NR_TURNO),
       f: "o",
       sup: "n",
@@ -261,22 +274,21 @@ parentPort.on("message", async (workerData) => {
       },
     };
 
-    await fs.promises.writeFile(caminhoArquivoCidade, JSON.stringify(jsonBase));
+    await Promise.all([
+      fs.promises.writeFile(caminhoArquivoCidade, JSON.stringify(jsonBase)),
+      fs.promises.writeFile(
+        caminhoArquivoZona,
+        JSON.stringify({
+          ...jsonBase,
+          tpabr: "zona",
+          cdabr: nrZona.padStart(4, "0"),
+        })
+      ),
+    ]);
 
-    logger.info(`[Worker] Arquivo cidade salvo`, {
-      caminho: caminhoArquivoCidade,
-    });
-
-    const jsonZona = {
-      ...jsonBase,
-      tpabr: "zona",
-      cdabr: nrZona.padStart(4, "0"),
-    };
-
-    await fs.promises.writeFile(caminhoArquivoZona, JSON.stringify(jsonZona));
-
-    logger.info(`[Worker] Arquivo zona salvo`, {
-      caminho: caminhoArquivoZona,
+    logger.info(`[Worker] Arquivos cidade/zona salvos`, {
+      cidade: caminhoArquivoCidade,
+      zona: caminhoArquivoZona,
     });
 
     const estadoFileName = `${uf.toLowerCase()}-c${cdCargo.padStart(
@@ -294,7 +306,7 @@ parentPort.on("message", async (workerData) => {
           await fd.close();
           break;
         } catch {
-          await new Promise((r) => setTimeout(r, 10));
+          await new Promise((r) => setTimeout(r, 5));
         }
       }
     };
