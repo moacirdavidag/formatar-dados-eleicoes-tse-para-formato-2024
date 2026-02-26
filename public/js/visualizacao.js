@@ -116,6 +116,7 @@ async function setEstado(uf) {
   if (!uf) return;
   const resp = await fetch(`/cidades_${uf}.json`);
   const cidades = await resp.json();
+  console.log(`Total cidades: ${cidades.length}`);
   cidades.sort((a, b) => a.nome.localeCompare(b.nome));
   cidades.forEach((c) => {
     const opt = document.createElement("option");
@@ -198,12 +199,16 @@ function renderCandidatos(data, filters) {
 
       let baseImg = null;
 
+      const isPresidencial = filterCargo.value === "1";
+
+      const ufFoto = isPresidencial ? "BR" : filters.estado;
+
       if (String(filters.ano) === "2024") {
         baseImg = `https://monitor-static.poder360.com.br/static?path=politicos_do_brasil/fotos/2024/${filters.municipio}/candidato${c.sqcand}`;
       } else if (Number(filters.ano) < 2022 && Number(filters.ano) !== 2020) {
-        baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/${filters.ano}/${filters.estado}/${c.sqcand}`;
+        baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/${filters.ano}/${ufFoto}/${c.sqcand}`;
       } else {
-        baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${filters.estado}${c.sqcand}_div`;
+        baseImg = `https://monitor-static.poder360.com.br/static?path=eleicoes/media/fotos/F${ufFoto}${c.sqcand}_div`;
       }
 
       const extensions = ["jpg", "jpeg", "png", "webp"];

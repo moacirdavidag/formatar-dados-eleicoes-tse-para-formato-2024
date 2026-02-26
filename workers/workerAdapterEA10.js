@@ -10,7 +10,9 @@ const numero = (v) => {
   const n = Number(String(v).replace(",", "."));
   return Number.isNaN(n) ? 0 : n;
 };
+
 const percentual = (p, t) => (!t || t === 0 ? null : (p / t) * 100);
+
 const normalizarAbr = (tp) => {
   if (!tp) return null;
   const v = String(tp).toLowerCase();
@@ -19,8 +21,38 @@ const normalizarAbr = (tp) => {
   if (v === "f") return "br";
   return v;
 };
+
 const formatPct = (n) => (n === null ? null : n.toFixed(2).replace(".", ","));
 const formatPctN = (n) => (n === null ? null : String(n));
+
+const sqValido = (sq) => {
+  if (!sq) return false;
+  const s = String(sq);
+  if (s.includes("E") || s.includes("e") || s.includes(",")) return false;
+  return /^\d+$/.test(s);
+};
+
+const gerarSq = (cand, detalhe) => {
+  const raw = cand?.SQ_CANDIDATO;
+
+  if (sqValido(raw)) return String(raw);
+
+  const alt = cand?.SQ_CANDIDATO_ORIGINAL;
+  if (sqValido(alt)) return String(alt);
+
+  const base = [
+    detalhe?.ANO_ELEICAO,
+    detalhe?.CD_ELEICAO,
+    cand?.NR_CANDIDATO,
+    detalhe?.SG_UF,
+  ]
+    .filter(Boolean)
+    .join("");
+
+  if (base) return base;
+
+  return String(cand?.NR_CANDIDATO || Date.now());
+};
 
 parentPort.on("message", async (workerData) => {
   try {
@@ -33,9 +65,7 @@ parentPort.on("message", async (workerData) => {
       turno: detalhe?.NR_TURNO,
     });
 
-    const uf = String(detalhe.SG_UF || "")
-      .trim()
-      .toUpperCase();
+    const uf = String(detalhe.SG_UF || "").trim().toUpperCase();
     const nomeUF = ESTADOS_BR[uf] || null;
     const cdMunicipio = detalhe.CD_MUNICIPIO;
     const nrZona = String(detalhe.NR_ZONA || detalhe.CD_ZONA || "0");
@@ -76,12 +106,15 @@ parentPort.on("message", async (workerData) => {
     const votosNulos = numero(detalhe.QT_VOTOS_NULOS);
 
     const candidatosMap = new Map();
+
     for (const cand of candidatos) {
-      const sq = String(cand.SQ_CANDIDATO);
+      const sq = gerarSq(cand, detalhe);
       const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
+
       if (!candidatosMap.has(sq)) {
         candidatosMap.set(sq, {
           ...cand,
+          SQ_CANDIDATO: sq,
           QT_VOTOS_NOMINAIS_VALIDOS: votosCand,
         });
       } else {
@@ -98,8 +131,10 @@ parentPort.on("message", async (workerData) => {
     const totalVotos = votosValidos + votosBrancos + votosNulos;
 
     const partidos = new Map();
+
     for (const cand of candidatosMap.values()) {
       const nrPartido = cand.NR_PARTIDO || "0";
+
       if (!partidos.has(nrPartido)) {
         partidos.set(nrPartido, {
           n: nrPartido,
@@ -108,6 +143,7 @@ parentPort.on("message", async (workerData) => {
           cand: [],
         });
       }
+
       const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
       const pctCand = percentual(votosCand, votosValidos);
       const situacao = texto(cand.DS_SIT_TOT_TURNO);
@@ -131,14 +167,17 @@ parentPort.on("message", async (workerData) => {
     }
 
     const todos = [];
+
     for (const [, p] of partidos) {
       for (const c of p.cand) todos.push(c);
     }
+
     todos.sort((a, b) => numero(b.vap) - numero(a.vap));
     todos.forEach((c, idx) => (c.seq = String(idx + 1)));
 
     const agr = Array.from(partidos.values()).map((p) => {
       const totalPartido = p.cand.reduce((s, c) => s + numero(c.vap), 0);
+
       return {
         n: null,
         nm: p.nm,
@@ -244,6 +283,7 @@ parentPort.on("message", async (workerData) => {
       4,
       "0"
     )}-e${cdEleicaoArquivo}-e.json`;
+
     const estadoPath = path.join(baseData, estadoFileName);
     const lockPath = `${estadoPath}.lock`;
 
