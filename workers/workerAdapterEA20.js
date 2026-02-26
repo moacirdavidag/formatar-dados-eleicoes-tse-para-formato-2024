@@ -24,7 +24,8 @@ const formatPctN = (n) => (n === null ? null : String(n));
 
 parentPort.on("message", async (workerData) => {
   try {
-    const { detalhe, candidatos } = workerData;
+    const { detalhe } = workerData;
+    let candidatos = workerData.candidatos;
 
     logger.info(`[Worker] Iniciando processamento`, {
       municipio: detalhe?.NM_MUNICIPIO,
@@ -76,14 +77,22 @@ parentPort.on("message", async (workerData) => {
     const votosNulos = numero(detalhe.QT_VOTOS_NULOS);
 
     const candidatosMap = new Map();
+
     for (const cand of candidatos) {
       const sq = String(cand.SQ_CANDIDATO);
       const votosCand =
         numero(cand.QT_VOTOS_NOMINAIS_VALIDOS) +
         numero(cand.QT_VOTOS_NOM_CONVR_LEG_VALIDOS);
+
       if (!candidatosMap.has(sq)) {
         candidatosMap.set(sq, {
-          ...cand,
+          NR_CANDIDATO: cand.NR_CANDIDATO,
+          SQ_CANDIDATO: cand.SQ_CANDIDATO,
+          NM_CANDIDATO: cand.NM_CANDIDATO,
+          NM_URNA_CANDIDATO: cand.NM_URNA_CANDIDATO,
+          SG_PARTIDO: cand.SG_PARTIDO,
+          NM_PARTIDO: cand.NM_PARTIDO,
+          NR_PARTIDO: cand.NR_PARTIDO,
           QT_VOTOS_NOMINAIS_VALIDOS: votosCand,
         });
       } else {
@@ -91,6 +100,8 @@ parentPort.on("message", async (workerData) => {
         existente.QT_VOTOS_NOMINAIS_VALIDOS += votosCand;
       }
     }
+
+    candidatos = null;
 
     const votosValidos = Array.from(candidatosMap.values()).reduce(
       (s, c) => s + numero(c.QT_VOTOS_NOMINAIS_VALIDOS),
@@ -100,8 +111,10 @@ parentPort.on("message", async (workerData) => {
     const totalVotos = votosValidos + votosBrancos + votosNulos;
 
     const partidos = new Map();
+
     for (const cand of candidatosMap.values()) {
       const nrPartido = cand.NR_PARTIDO || "0";
+
       if (!partidos.has(nrPartido)) {
         partidos.set(nrPartido, {
           n: nrPartido,
@@ -110,8 +123,10 @@ parentPort.on("message", async (workerData) => {
           cand: [],
         });
       }
+
       const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
       const pctCand = percentual(votosCand, votosValidos);
+
       partidos.get(nrPartido).cand.push({
         n: cand.NR_CANDIDATO,
         sqcand: cand.SQ_CANDIDATO,
@@ -130,10 +145,13 @@ parentPort.on("message", async (workerData) => {
       });
     }
 
+    candidatosMap.clear();
+
     const todos = [];
     for (const [, p] of partidos) {
       for (const c of p.cand) todos.push(c);
     }
+
     todos.sort((a, b) => numero(b.vap) - numero(a.vap));
     todos.forEach((c, idx) => (c.seq = String(idx + 1)));
 
@@ -231,6 +249,7 @@ parentPort.on("message", async (workerData) => {
       tpabr: "zona",
       cdabr: nrZona.padStart(4, "0"),
     };
+
     await fs.promises.writeFile(caminhoArquivoZona, JSON.stringify(jsonZona));
 
     logger.info(`[Worker] Arquivo zona salvo`, {
@@ -277,6 +296,8 @@ parentPort.on("message", async (workerData) => {
     logger.info(`[Worker] Arquivo estado atualizado`, {
       caminho: estadoPath,
     });
+
+    todos.length = 0;
 
     parentPort.postMessage({
       ok: true,
