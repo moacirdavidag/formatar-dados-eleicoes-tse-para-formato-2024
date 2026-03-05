@@ -10,7 +10,11 @@ const numero = (v) => {
   const n = Number(String(v).replace(",", "."));
   return Number.isNaN(n) ? 0 : n;
 };
+
 const percentual = (p, t) => (!t || t === 0 ? null : (p / t) * 100);
+const formatPct = (n) => (n === null ? null : n.toFixed(2).replace(".", ","));
+const formatPctN = (n) => (n === null ? null : String(n));
+
 const normalizarAbr = (tp) => {
   if (!tp) return null;
   const v = String(tp).toLowerCase();
@@ -19,14 +23,36 @@ const normalizarAbr = (tp) => {
   if (v === "f") return "br";
   return v;
 };
-const formatPct = (n) => (n === null ? null : n.toFixed(2).replace(".", ","));
-const formatPctN = (n) => (n === null ? null : String(n));
+
+const sqValido = (sq) => {
+  if (!sq) return false;
+  const s = String(sq);
+  if (s.includes("E") || s.includes("e") || s.includes(",")) return false;
+  return /^\d+$/.test(s);
+};
+
+const gerarSq = (cand, detalhe) => {
+  const raw = cand?.SQ_CANDIDATO;
+  if (sqValido(raw)) return String(raw);
+
+  const base = [
+    detalhe?.ANO_ELEICAO,
+    detalhe?.CD_ELEICAO,
+    cand?.NR_CANDIDATO,
+    detalhe?.SG_UF,
+  ]
+    .filter(Boolean)
+    .join("");
+
+  if (base) return base;
+  return String(cand?.NR_CANDIDATO || Date.now());
+};
 
 parentPort.on("message", async (workerData) => {
   try {
     const { detalhe, candidatos } = workerData;
 
-    logger.info(`[Worker] Iniciando processamento`, {
+    logger.info(`[Worker 2012] Iniciando processamento`, {
       municipio: detalhe?.NM_MUNICIPIO,
       uf: detalhe?.SG_UF,
       cargo: detalhe?.CD_CARGO,
@@ -37,13 +63,13 @@ parentPort.on("message", async (workerData) => {
       .trim()
       .toUpperCase();
     const nomeUF = ESTADOS_BR[uf] || null;
-    const cdMunicipio = detalhe.CD_MUNICIPIO;
+    const cdMunicipio = String(detalhe.CD_MUNICIPIO);
     const nrZona = String(detalhe.NR_ZONA || detalhe.CD_ZONA || "0");
 
     const abrangencia = normalizarAbr(detalhe.TP_ABRANGENCIA);
     const cdCargo = String(detalhe.CD_CARGO);
     const cdEleicao = String(detalhe.CD_ELEICAO);
-    const cdEleicaoArquivo = String(detalhe.CD_ELEICAO).padStart(6, "0");
+    const cdEleicaoArquivo = cdEleicao.padStart(6, "0");
 
     const baseData = path.join(
       process.cwd(),
@@ -53,18 +79,20 @@ parentPort.on("message", async (workerData) => {
       "dados",
       uf.toLowerCase()
     );
-    fs.mkdirSync(baseData, { recursive: true });
+
+    await fs.promises.mkdir(baseData, { recursive: true });
 
     const nomeArquivoCidade = `${uf.toLowerCase()}${cdMunicipio}-c${cdCargo.padStart(
       4,
       "0"
     )}-e${cdEleicaoArquivo}-u.json`;
-    const caminhoArquivoCidade = path.join(baseData, nomeArquivoCidade);
 
     const nomeArquivoZona = `${uf.toLowerCase()}${cdMunicipio}-z${nrZona.padStart(
       4,
       "0"
     )}-c${cdCargo.padStart(4, "0")}-e${cdEleicaoArquivo}-u.json`;
+
+    const caminhoArquivoCidade = path.join(baseData, nomeArquivoCidade);
     const caminhoArquivoZona = path.join(baseData, nomeArquivoZona);
 
     const totalAptos = numero(detalhe.QT_APTOS);
@@ -76,73 +104,88 @@ parentPort.on("message", async (workerData) => {
     const votosNulos = numero(detalhe.QT_VOTOS_NULOS);
 
     const candidatosMap = new Map();
-    for (const cand of candidatos) {
-      const sq = String(cand.SQ_CANDIDATO);
-      const votosCand =
-        numero(cand.QT_VOTOS_NOMINAIS_VALIDOS) +
-        numero(cand.QT_VOTOS_NOM_CONVR_LEG_VALIDOS);
-      if (!candidatosMap.has(sq)) {
+
+    for (let i = 0; i < candidatos.length; i++) {
+      const cand = candidatos[i];
+      const sq = gerarSq(cand, detalhe);
+      const votosCand = numero(cand.QT_VOTOS_NOMINAIS);
+
+      const existente = candidatosMap.get(sq);
+
+      if (!existente) {
         candidatosMap.set(sq, {
           ...cand,
-          QT_VOTOS_NOMINAIS_VALIDOS: votosCand,
+          SQ_CANDIDATO: sq,
+          QT_VOTOS_NOMINAIS: votosCand,
         });
       } else {
-        const existente = candidatosMap.get(sq);
-        existente.QT_VOTOS_NOMINAIS_VALIDOS += votosCand;
+        existente.QT_VOTOS_NOMINAIS += votosCand;
       }
     }
 
-    const votosValidos = Array.from(candidatosMap.values()).reduce(
-      (s, c) => s + numero(c.QT_VOTOS_NOMINAIS_VALIDOS),
-      0
-    );
+    let votosValidos = 0;
+    for (const c of candidatosMap.values()) {
+      votosValidos += numero(c.QT_VOTOS_NOMINAIS);
+    }
 
     const totalVotos = votosValidos + votosBrancos + votosNulos;
 
     const partidos = new Map();
+    const todos = [];
+
     for (const cand of candidatosMap.values()) {
-      const situacao = texto(cand.DS_SIT_TOT_TURNO);
-      const eleito =
-        situacao && situacao.toUpperCase().includes("ELEITO") ? "s" : "n";
       const nrPartido = cand.NR_PARTIDO || "0";
-      if (!partidos.has(nrPartido)) {
-        partidos.set(nrPartido, {
+
+      let partido = partidos.get(nrPartido);
+
+      if (!partido) {
+        partido = {
           n: nrPartido,
           sg: texto(cand.SG_PARTIDO).toUpperCase(),
           nm: texto(cand.NM_PARTIDO),
           cand: [],
-        });
+          total: 0,
+        };
+        partidos.set(nrPartido, partido);
       }
-      const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
+
+      const votosCand = numero(cand.QT_VOTOS_NOMINAIS);
+      partido.total += votosCand;
+
       const pctCand = percentual(votosCand, votosValidos);
-      partidos.get(nrPartido).cand.push({
+      const situacao = texto(cand.DS_SIT_TOT_TURNO);
+      const eleito = situacao && situacao.toUpperCase().startsWith("ELEITO");
+
+      const obj = {
         n: cand.NR_CANDIDATO,
         sqcand: cand.SQ_CANDIDATO,
         nm: texto(cand.NM_CANDIDATO),
         nmu: texto(cand.NM_URNA_CANDIDATO),
         sgp: texto(cand.SG_PARTIDO).toUpperCase(),
         dt: null,
-        dvt: null,
+        dvt: texto(cand.NM_TIPO_DESTINACAO_VOTOS) || null,
         seq: null,
-        e: eleito,
-        st: situacao,
+        e: eleito ? "s" : "n",
+        st: situacao || null,
         vap: String(votosCand),
         pvap: formatPct(pctCand),
         pvapn: formatPctN(pctCand),
         vs: [],
-      });
+      };
+
+      partido.cand.push(obj);
+      todos.push(obj);
     }
 
-    const todos = [];
-    for (const [, p] of partidos) {
-      for (const c of p.cand) todos.push(c);
+    todos.sort((a, b) => Number(b.vap) - Number(a.vap));
+    for (let i = 0; i < todos.length; i++) {
+      todos[i].seq = String(i + 1);
     }
-    todos.sort((a, b) => numero(b.vap) - numero(a.vap));
-    todos.forEach((c, idx) => (c.seq = String(idx + 1)));
 
-    const agr = Array.from(partidos.values()).map((p) => {
-      const totalPartido = p.cand.reduce((s, c) => s + numero(c.vap), 0);
-      return {
+    const agr = [];
+
+    for (const p of partidos.values()) {
+      agr.push({
         n: null,
         nm: p.nm,
         tp: "i",
@@ -154,15 +197,15 @@ parentPort.on("message", async (workerData) => {
             sg: p.sg,
             nm: p.nm,
             nfed: "",
-            tvtn: String(totalPartido),
+            tvtn: String(p.total),
             tvtl: "0",
             tval: "0",
-            tvan: String(totalPartido),
+            tvan: String(p.total),
             cand: p.cand,
           },
         ],
-      };
-    });
+      });
+    }
 
     const pctComp = percentual(comparecimento, totalAptos);
     const pctAbs = percentual(abstencao, totalAptos);
@@ -170,8 +213,10 @@ parentPort.on("message", async (workerData) => {
     const pctVB = percentual(votosBrancos, totalVotos);
     const pctVN = percentual(votosNulos, totalVotos);
 
+    const existeEleito = todos.some((c) => c.e === "s");
+
     const jsonBase = {
-      ele: String(cdEleicao),
+      ele: cdEleicao,
       t: String(detalhe.NR_TURNO),
       f: "o",
       sup: "n",
@@ -184,7 +229,7 @@ parentPort.on("message", async (workerData) => {
       dv: "s",
       tf: "s",
       and: "f",
-      esae: "s",
+      esae: existeEleito ? "n" : "s",
       mnae: [],
       carg: [
         {
@@ -213,7 +258,7 @@ parentPort.on("message", async (workerData) => {
         pvv: formatPct(pctVV),
         pvvn: formatPctN(pctVV),
         vnom: String(votosValidos),
-        vl: String(votosValidos),
+        vl: "0",
         vb: String(votosBrancos),
         pvb: formatPct(pctVB),
         pvbn: formatPctN(pctVB),
@@ -225,60 +270,18 @@ parentPort.on("message", async (workerData) => {
 
     await fs.promises.writeFile(caminhoArquivoCidade, JSON.stringify(jsonBase));
 
-    logger.info(`[Worker] Arquivo cidade salvo`, {
-      caminho: caminhoArquivoCidade,
-    });
+    await fs.promises.writeFile(
+      caminhoArquivoZona,
+      JSON.stringify({
+        ...jsonBase,
+        tpabr: "zona",
+        cdabr: nrZona.padStart(4, "0"),
+      })
+    );
 
-    const jsonZona = {
-      ...jsonBase,
-      tpabr: "zona",
-      cdabr: nrZona.padStart(4, "0"),
-    };
-    await fs.promises.writeFile(caminhoArquivoZona, JSON.stringify(jsonZona));
-
-    logger.info(`[Worker] Arquivo zona salvo`, {
-      caminho: caminhoArquivoZona,
-    });
-
-    const estadoFileName = `${uf.toLowerCase()}-c${cdCargo.padStart(
-      4,
-      "0"
-    )}-e${cdEleicaoArquivo}-e.json`;
-    const estadoPath = path.join(baseData, estadoFileName);
-
-    let estadoJSON = {
-      ele: cdEleicao,
-      cdabr: uf.toLowerCase(),
-      nmabr: nomeUF,
-      t: detalhe.NR_TURNO,
-      f: "o",
-      cdcar: cdCargo.padStart(3, "0"),
-      nmcar: texto(detalhe.DS_CARGO),
-      dg: detalhe.DT_ELEICAO,
-      abr: [],
-    };
-
-    if (fs.existsSync(estadoPath)) {
-      estadoJSON = JSON.parse(await fs.promises.readFile(estadoPath, "utf-8"));
-    }
-
-    estadoJSON.abr.push({
-      dt: detalhe.DT_ELEICAO || null,
-      ht: detalhe.HH_ULTIMA_TOTALIZACAO || null,
-      tpabr: "mu",
-      cdabr: String(cdMunicipio),
-      nmabr: texto(detalhe.NM_MUNICIPIO),
-      tvap: String(todos[0]?.vap || 0),
-      scv: "n",
-      esae: "s",
-      mnae: [],
-      cand: todos.slice(0, 1),
-    });
-
-    await fs.promises.writeFile(estadoPath, JSON.stringify(estadoJSON));
-
-    logger.info(`[Worker] Arquivo estado atualizado`, {
-      caminho: estadoPath,
+    logger.info(`[Worker 2012] Arquivos cidade/zona salvos`, {
+      cidade: caminhoArquivoCidade,
+      zona: caminhoArquivoZona,
     });
 
     parentPort.postMessage({
@@ -293,14 +296,29 @@ parentPort.on("message", async (workerData) => {
             ? [{ [nrZona.padStart(4, "0")]: `${nrZona}ª ZE` }]
             : [],
       },
+      resumoEstado: {
+        uf,
+        cdCargo,
+        cdEleicao,
+        turno: detalhe.NR_TURNO,
+        municipio: cdMunicipio,
+        nomeMunicipio: texto(detalhe.NM_MUNICIPIO),
+        votosValidos,
+        votosBrancos,
+        votosNulos,
+        totalAptos,
+        comparecimento,
+        abstencao,
+        melhor: todos[0] || null,
+      },
     });
 
-    logger.info(`[Worker] Processamento concluído`, {
+    logger.info(`[Worker 2012] Processamento concluído`, {
       municipio: detalhe?.NM_MUNICIPIO,
       uf,
     });
   } catch (erro) {
-    logger.error(`[Worker] Erro processamento cidade`, {
+    logger.error(`[Worker 2012] Erro processamento cidade`, {
       erro: erro.message,
       stack: erro.stack,
     });
