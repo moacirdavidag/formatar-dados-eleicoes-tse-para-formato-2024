@@ -5,6 +5,37 @@ import logger from "../logger.config.js";
 import { texto } from "../shared/functions.js";
 import ESTADOS_BR from "../shared/estados_BR.js";
 
+const atualizarCodigosEleicoes = async (anoEleicao, cdEleicao, turno, cdCargo, dsCargo) => {
+  const caminho = path.join(process.cwd(), "public", "js", "codigos_eleicoes.json");
+
+  await fs.promises.mkdir(path.dirname(caminho), { recursive: true });
+
+  let dados = {};
+
+  try {
+    const conteudo = await fs.promises.readFile(caminho, "utf8");
+    dados = JSON.parse(conteudo);
+  } catch (_) {}
+
+  const ano = Number(anoEleicao);
+  const t = Number(turno);
+  const cd = Number(cdCargo);
+
+  if (!dados[ano]) {
+    dados[ano] = { turnos: {}, cargos: {} };
+  }
+
+  if (!dados[ano].turnos[t] || dados[ano].turnos[t] === null) {
+    dados[ano].turnos[t] = Number(cdEleicao);
+  }
+
+  if (!dados[ano].cargos[cd]) {
+    dados[ano].cargos[cd] = nomeCargo(cdCargo) || texto(dsCargo);
+  }
+
+  await fs.promises.writeFile(caminho, JSON.stringify(dados, null, 2), "utf8");
+};
+
 const numero = (v) => {
   if (v === undefined || v === null || v === "") return 0;
   const n = Number(String(v).replace(",", "."));
@@ -86,57 +117,45 @@ const acumularTemp = async (caminhoTemp, entrada) => {
   await fs.promises.writeFile(caminhoTemp, JSON.stringify(acumulado), "utf8");
 };
 
-const IBGE_API =
-  "https://servicodados.ibge.gov.br/api/v1/localidades/municipios";
 const IBGE_CACHE_DIR = path.join(process.cwd(), "tmp", "ibge-cache");
 
 const buscarCodigoIBGE = async (nmMunicipio, sgUF) => {
   await fs.promises.mkdir(IBGE_CACHE_DIR, { recursive: true });
 
-  const chave = `${sgUF.toLowerCase()}-${nmMunicipio
-    .toLowerCase()
-    .replace(/\s+/g, "_")}`;
-  const caminhoCache = path.join(IBGE_CACHE_DIR, `${chave}.json`);
+  const caminhoCache = path.join(IBGE_CACHE_DIR, `${sgUF.toLowerCase()}.json`);
+
+  let lista = null;
 
   try {
     const cached = await fs.promises.readFile(caminhoCache, "utf8");
-    return JSON.parse(cached).cdi;
+    lista = JSON.parse(cached);
   } catch (_) {}
 
-  try {
-    const res = await fetch(
-      `${IBGE_API}?view=nivelado&nome=${encodeURIComponent(nmMunicipio)}`
-    );
-
-    if (!res.ok) return null;
-
-    const lista = await res.json();
-    const normalizar = (s) =>
-      String(s)
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .trim();
-
-    const encontrado = lista.find(
-      (m) =>
-        normalizar(m["municipio-nome"]) === normalizar(nmMunicipio) &&
-        normalizar(m["municipio-microrregiao-mesorregiao-UF-sigla"]) ===
-          normalizar(sgUF)
-    );
-
-    const cdi = encontrado ? String(encontrado["municipio-id"]) : null;
-
-    await fs.promises.writeFile(
-      caminhoCache,
-      JSON.stringify({ cdi, nm: nmMunicipio, uf: sgUF }),
-      "utf8"
-    );
-
-    return cdi;
-  } catch (_) {
-    return null;
+  if (!lista) {
+    try {
+      const res = await fetch(
+        `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${sgUF}/municipios`
+      );
+      if (!res.ok) return null;
+      lista = await res.json();
+      await fs.promises.writeFile(caminhoCache, JSON.stringify(lista), "utf8");
+    } catch (_) {
+      return null;
+    }
   }
+
+  const normalizar = (s) =>
+    String(s)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
+  const encontrado = lista.find(
+    (m) => normalizar(m.nome) === normalizar(nmMunicipio)
+  );
+
+  return encontrado ? String(encontrado.id) : null;
 };
 
 const atualizarMunCm = async (
@@ -927,6 +946,14 @@ parentPort.on("message", async (workerData) => {
       uf: ufSigla,
       cargo: cdCargo,
     });
+
+    await atualizarCodigosEleicoes(
+      anoEleicao,
+      cdEleicao,
+      detalhe.NR_TURNO,
+      cdCargo,
+      detalhe.DS_CARGO
+    );
 
     const resumoMunicipio = {
       uf: ufSigla,
