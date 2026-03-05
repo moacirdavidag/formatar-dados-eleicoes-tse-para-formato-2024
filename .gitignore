@@ -5,3 +5,5 @@ assets
 public/ele*
 public/cidades_*.json
 public/estados*.json
+public/arquivos
+public/*.zip
