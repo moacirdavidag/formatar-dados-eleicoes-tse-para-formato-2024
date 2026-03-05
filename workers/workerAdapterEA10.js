@@ -348,6 +348,199 @@ const construirVotos = (
   };
 };
 
+const NOMES_CARGO = {
+  1: "Presidente",
+  3: "Governador",
+  5: "Senador",
+  6: "Deputado Federal",
+  7: "Deputado Estadual",
+  8: "Deputado Distrital",
+  11: "Prefeito",
+  13: "Vereador",
+};
+
+const nomeCargo = (cd) => NOMES_CARGO[String(Number(cd))] || texto(cd);
+
+const atualizarEleitos = async (
+  baseData,
+  ufSigla,
+  nomeUF,
+  cdCargo,
+  cdEleicaoArquivo,
+  cdEleicao,
+  turno,
+  dgGeracao,
+  hgGeracao,
+  dtTotalizacao,
+  htTotalizacao,
+  cdMunicipio,
+  nmMunicipio,
+  totalVotosValidos,
+  existeEleito,
+  eleitos,
+  partidos,
+  federacoesMap
+) => {
+  const cdCargoArquivo = String(cdCargo).padStart(4, "0");
+  const caminho = path.join(
+    baseData,
+    `${ufSigla.toLowerCase()}-c${cdCargoArquivo}-e${cdEleicaoArquivo}-e.json`
+  );
+
+  let json = {
+    ele: cdEleicao,
+    cdabr: ufSigla.toLowerCase(),
+    nmabr: nomeUF || ufSigla,
+    t: String(turno),
+    f: "o",
+    cdcar: String(Number(cdCargo)),
+    nmcar: nomeCargo(cdCargo),
+    dg: dgGeracao || null,
+    hg: hgGeracao || null,
+    abr: [],
+  };
+
+  try {
+    const conteudo = await fs.promises.readFile(caminho, "utf8");
+    json = JSON.parse(conteudo);
+  } catch (_) {}
+
+  const jaExiste = json.abr.some((a) => a.cdabr === cdMunicipio);
+  if (jaExiste) {
+    await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
+    return;
+  }
+
+  const candEleitos = eleitos.map((c) => {
+    const nrPartido = [...partidos.entries()].find(([, p]) =>
+      p.cand.some((x) => x.sqcand === c.sqcand)
+    )?.[0];
+
+    const partido = partidos.get(nrPartido);
+
+    let com = partido?.sg || null;
+    if (partido?.nrFed) {
+      const fed = federacoesMap.get(partido.nrFed);
+      if (fed) com = fed.com || fed.sg || com;
+    }
+
+    return {
+      n: c.n,
+      sqcand: c.sqcand,
+      nm: c.nm,
+      nmu: c.nmu,
+      sgp: partido?.sg || null,
+      com,
+      vap: c.vap,
+      seq: c.seq,
+      vs: c.vs || [],
+    };
+  });
+
+  json.abr.push({
+    dt: dtTotalizacao || null,
+    ht: htTotalizacao || null,
+    tpabr: "mu",
+    cdabr: cdMunicipio,
+    nmabr: nmMunicipio,
+    tvap: String(totalVotosValidos),
+    scv: "n",
+    esae: existeEleito ? "n" : "s",
+    mnae: [],
+    cand: candEleitos,
+  });
+
+  json.abr.sort((a, b) => a.cdabr.localeCompare(b.cdabr));
+
+  await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
+};
+
+const atualizarAbrangencia = async (
+  baseData,
+  ufSigla,
+  cdEleicaoArquivo,
+  cdEleicao,
+  turno,
+  dgGeracao,
+  hgGeracao,
+  dtTotalizacao,
+  htTotalizacao,
+  cdMunicipio,
+  secoes,
+  eleitorado,
+  totalAptos,
+  comparecimento,
+  abstencao
+) => {
+  const caminho = path.join(
+    baseData,
+    `${ufSigla.toLowerCase()}-e${cdEleicaoArquivo}-ab.json`
+  );
+
+  let json = {
+    ele: cdEleicao,
+    t: String(turno),
+    f: "o",
+    dg: dgGeracao || null,
+    hg: hgGeracao || null,
+    abr: [],
+  };
+
+  try {
+    const conteudo = await fs.promises.readFile(caminho, "utf8");
+    json = JSON.parse(conteudo);
+  } catch (_) {}
+
+  const jaExiste = json.abr.some((a) => a.cdabr === cdMunicipio);
+  if (jaExiste) {
+    await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
+    return;
+  }
+
+  const pctComp = percentual(comparecimento, totalAptos);
+  const pctAbs = percentual(abstencao, totalAptos);
+
+  json.abr.push({
+    and: "f",
+    tpabr: "mun",
+    cdabr: cdMunicipio,
+    dt: dtTotalizacao || null,
+    ht: htTotalizacao || null,
+    s: secoes,
+    e: {
+      te: String(totalAptos),
+      est: secoes.st ? String(totalAptos) : null,
+      pest: secoes.st ? "100,00" : null,
+      pestn: secoes.st ? "100" : null,
+      esnt: eleitorado.esnt || "0",
+      pesnt: "0,00",
+      pesntn: "0",
+      esi: String(totalAptos),
+      pesi: "100,00",
+      pesin: "100",
+      esni: "0",
+      pesni: "0,00",
+      pesnin: "0",
+      esa: String(totalAptos),
+      pesa: "100,00",
+      pesan: "100",
+      esna: "0",
+      pesna: "0,00",
+      pesnan: "0",
+      c: String(comparecimento),
+      pc: formatPct(pctComp),
+      pcn: formatPctN(pctComp),
+      a: String(abstencao),
+      pa: formatPct(pctAbs),
+      pan: formatPctN(pctAbs),
+    },
+  });
+
+  json.abr.sort((a, b) => a.cdabr.localeCompare(b.cdabr));
+
+  await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
+};
+
 parentPort.on("message", async (workerData) => {
   const { detalhe, candidatos } = workerData;
 
@@ -686,6 +879,53 @@ parentPort.on("message", async (workerData) => {
       municipio: municipioNome,
       uf: ufSigla,
       cdi,
+    });
+
+    const eleitosFiltrados = todos.filter((c) => c.e === "s");
+
+    await atualizarEleitos(
+      baseData,
+      ufSigla,
+      nomeUF,
+      cdCargo,
+      cdEleicaoArquivo,
+      cdEleicao,
+      detalhe.NR_TURNO,
+      detalhe.DT_GERACAO || null,
+      detalhe.HH_GERACAO || null,
+      detalhe.DT_ULTIMA_TOTALIZACAO || null,
+      detalhe.HH_ULTIMA_TOTALIZACAO || null,
+      cdMunicipio,
+      texto(detalhe.NM_MUNICIPIO),
+      votosValidos,
+      existeEleito,
+      eleitosFiltrados,
+      partidos,
+      federacoesMap
+    );
+
+    await atualizarAbrangencia(
+      baseData,
+      ufSigla,
+      cdEleicaoArquivo,
+      cdEleicao,
+      detalhe.NR_TURNO,
+      detalhe.DT_GERACAO || null,
+      detalhe.HH_GERACAO || null,
+      detalhe.DT_ULTIMA_TOTALIZACAO || null,
+      detalhe.HH_ULTIMA_TOTALIZACAO || null,
+      cdMunicipio,
+      secoes,
+      eleitorado,
+      totalAptos,
+      comparecimento,
+      abstencao
+    );
+
+    logger.info(`[Worker] Arquivos eleitos/abrangência atualizados`, {
+      municipio: municipioNome,
+      uf: ufSigla,
+      cargo: cdCargo,
     });
 
     const resumoMunicipio = {
