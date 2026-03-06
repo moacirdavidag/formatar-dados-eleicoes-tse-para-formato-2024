@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import logger from "../logger.config.js";
-import ESTADOS_BR from "../shared/estados_BR.js";
 
 const numero = (v) => {
   if (v === undefined || v === null || v === "") return 0;
@@ -13,7 +12,32 @@ const percentual = (p, t) => (!t || t === 0 ? null : (p / t) * 100);
 const formatPct = (n) => (n === null ? "0,00" : n.toFixed(2).replace(".", ","));
 
 const CARGOS_BR = ["1", "01", "001", "0001"];
-const CARGOS_UF = ["1", "01", "001", "0001", "3", "03", "003", "0003", "5", "05", "005", "0005", "6", "06", "006", "0006", "7", "07", "007", "0007", "8", "08", "008", "0008"];
+const CARGOS_UF = [
+  "1",
+  "01",
+  "001",
+  "0001",
+  "3",
+  "03",
+  "003",
+  "0003",
+  "5",
+  "05",
+  "005",
+  "0005",
+  "6",
+  "06",
+  "006",
+  "0006",
+  "7",
+  "07",
+  "007",
+  "0007",
+  "8",
+  "08",
+  "008",
+  "0008",
+];
 
 const normalizarCargo = (cd) => String(cd).replace(/^0+/, "") || "0";
 
@@ -29,11 +53,60 @@ const lerTemp = async (caminho) => {
   }
 };
 
-const construirCandidatosAgregados = (municipios, votosValidosTotal) => {
+const novoGrupo = (mu, uf) => ({
+  cdCargo: mu.cdCargo,
+  cdCargoNorm: normalizarCargo(mu.cdCargo),
+  turno: String(mu.turno),
+  uf: uf || null,
+  dgGeracao: mu.dgGeracao || null,
+  hgGeracao: mu.hgGeracao || null,
+  dtTotalizacao: mu.dtTotalizacao || null,
+  htTotalizacao: mu.htTotalizacao || null,
+  totalAptos: 0,
+  comparecimento: 0,
+  abstencao: 0,
+  votosValidos: 0,
+  votosBrancos: 0,
+  votosNulos: 0,
+  totalVotos: 0,
+  secoes: { ts: 0, sni: 0 },
+  candidatosPorMunicipio: [],
+});
+
+const acumularMunicipio = (grupo, mu) => {
+  grupo.totalAptos += numero(mu.totalAptos);
+  grupo.comparecimento += numero(mu.comparecimento);
+  grupo.abstencao += numero(mu.abstencao);
+  grupo.votosValidos += numero(mu.votosValidos);
+  grupo.votosBrancos += numero(mu.votosBrancos);
+  grupo.votosNulos += numero(mu.votosNulos);
+  grupo.totalVotos += numero(mu.totalVotos);
+  grupo.secoes.ts += numero(mu.secoes?.ts);
+  grupo.secoes.sni += numero(mu.secoes?.sni);
+  grupo.dtTotalizacao = mu.dtTotalizacao || grupo.dtTotalizacao;
+  grupo.htTotalizacao = mu.htTotalizacao || grupo.htTotalizacao;
+  if (mu.candidatos?.length) {
+    grupo.candidatosPorMunicipio.push(mu.candidatos);
+  }
+};
+
+const finalizarSecoes = (s) => {
+  s.si = s.ts - s.sni;
+  s.st = s.si;
+  s.snt = s.ts - s.st;
+  s.sa = s.si;
+  s.sna = 0;
+  return s;
+};
+
+const construirCandidatosAgregados = (
+  candidatosPorMunicipio,
+  votosValidosTotal
+) => {
   const candMap = new Map();
 
-  for (const mu of municipios) {
-    for (const c of mu.candidatos || []) {
+  for (const candidatos of candidatosPorMunicipio) {
+    for (const c of candidatos) {
       const key = String(c.n);
       const existing = candMap.get(key);
 
@@ -75,64 +148,8 @@ const construirCandidatosAgregados = (municipios, votosValidosTotal) => {
   return lista;
 };
 
-const somarMunicipios = (municipios) => {
-  let totalAptos = 0;
-  let comparecimento = 0;
-  let abstencao = 0;
-  let votosValidos = 0;
-  let votosBrancos = 0;
-  let votosNulos = 0;
-  let totalVotos = 0;
-  let secoes = { ts: 0, st: 0, snt: 0, si: 0, sni: 0, sa: 0, sna: 0 };
-
-  for (const mu of municipios) {
-    totalAptos += numero(mu.totalAptos);
-    comparecimento += numero(mu.comparecimento);
-    abstencao += numero(mu.abstencao);
-    votosValidos += numero(mu.votosValidos);
-    votosBrancos += numero(mu.votosBrancos);
-    votosNulos += numero(mu.votosNulos);
-    totalVotos += numero(mu.totalVotos);
-    secoes.ts += numero(mu.secoes?.ts);
-    secoes.sni += numero(mu.secoes?.sni);
-  }
-
-  secoes.si = secoes.ts - secoes.sni;
-  secoes.st = secoes.si;
-  secoes.snt = secoes.ts - secoes.st;
-  secoes.sa = secoes.si;
-  secoes.sna = 0;
-
-  return {
-    totalAptos,
-    comparecimento,
-    abstencao,
-    votosValidos,
-    votosBrancos,
-    votosNulos,
-    totalVotos,
-    secoes,
-  };
-};
-
-const construirAbr = (
-  dados,
-  tpabr,
-  cdabr,
-  municipios,
-  dtTotalizacao,
-  htTotalizacao
-) => {
-  const {
-    totalAptos,
-    comparecimento,
-    abstencao,
-    votosValidos,
-    votosBrancos,
-    votosNulos,
-    totalVotos,
-    secoes,
-  } = dados;
+const construirAbr = (grupo, tpabr, cdabr) => {
+  const secoes = finalizarSecoes({ ...grupo.secoes });
 
   const pst = percentual(secoes.st, secoes.ts);
   const psnt = percentual(secoes.snt, secoes.ts);
@@ -140,19 +157,22 @@ const construirAbr = (
   const psni = percentual(secoes.sni, secoes.ts);
   const psa = percentual(secoes.sa, secoes.si);
   const psna = percentual(secoes.sna, secoes.si);
-  const pc = percentual(comparecimento, totalAptos);
-  const pa = percentual(abstencao, totalAptos);
-  const pvv = percentual(votosValidos, totalVotos);
-  const pvb = percentual(votosBrancos, totalVotos);
-  const ptvn = percentual(votosNulos, totalVotos);
-  const pvvc = percentual(votosValidos, totalVotos);
-  const pvnom = votosValidos > 0 ? "100,00" : "0,00";
+  const pc = percentual(grupo.comparecimento, grupo.totalAptos);
+  const pa = percentual(grupo.abstencao, grupo.totalAptos);
+  const pvv = percentual(grupo.votosValidos, grupo.totalVotos);
+  const pvb = percentual(grupo.votosBrancos, grupo.totalVotos);
+  const ptvn = percentual(grupo.votosNulos, grupo.totalVotos);
+  const pvvc = percentual(grupo.votosValidos, grupo.totalVotos);
+  const pvnom = grupo.votosValidos > 0 ? "100,00" : "0,00";
 
-  const candidatos = construirCandidatosAgregados(municipios, votosValidos);
+  const candidatos = construirCandidatosAgregados(
+    grupo.candidatosPorMunicipio,
+    grupo.votosValidos
+  );
 
   return {
-    dt: dtTotalizacao || null,
-    ht: htTotalizacao || null,
+    dt: grupo.dtTotalizacao || null,
+    ht: grupo.htTotalizacao || null,
     tf: "S",
     and: "F",
     tpabr: tpabr.toUpperCase(),
@@ -170,29 +190,31 @@ const construirAbr = (
     psni: formatPct(psni),
     psa: formatPct(psa),
     psna: formatPct(psna),
-    e: String(totalAptos),
-    ea: String(comparecimento + abstencao),
+    e: String(grupo.totalAptos),
+    ea: String(grupo.comparecimento + grupo.abstencao),
     ena: "0",
-    esi: String(comparecimento + abstencao),
+    esi: String(grupo.comparecimento + grupo.abstencao),
     esni: String(secoes.sni),
-    c: String(comparecimento),
-    a: String(abstencao),
+    c: String(grupo.comparecimento),
+    a: String(grupo.abstencao),
     pea: "100,00",
     pena: "0,00",
-    pesi: formatPct(percentual(comparecimento + abstencao, totalAptos)),
-    pesni: formatPct(percentual(secoes.sni, totalAptos)),
+    pesi: formatPct(
+      percentual(grupo.comparecimento + grupo.abstencao, grupo.totalAptos)
+    ),
+    pesni: formatPct(percentual(secoes.sni, grupo.totalAptos)),
     pa: formatPct(pa),
     pc: formatPct(pc),
     vscv: "0",
-    vnom: String(votosValidos),
-    tv: String(totalVotos),
-    vvc: String(votosValidos),
-    vb: String(votosBrancos),
-    tvn: String(votosNulos),
-    vn: String(votosNulos),
+    vnom: String(grupo.votosValidos),
+    tv: String(grupo.totalVotos),
+    vvc: String(grupo.votosValidos),
+    vb: String(grupo.votosBrancos),
+    tvn: String(grupo.votosNulos),
+    vn: String(grupo.votosNulos),
     vnt: "0",
     vp: "0",
-    vv: String(votosValidos),
+    vv: String(grupo.votosValidos),
     van: "0",
     vansj: "0",
     pvnom,
@@ -217,7 +239,6 @@ const construirAbr = (
 };
 
 const construirJsonTotalizacao = (
-  anoEleicao,
   cdEleicao,
   turno,
   cdCargo,
@@ -285,118 +306,84 @@ export const consolidarUFeBR = async (anoEleicao, cdEleicao) => {
   const arquivosTempUF = arquivosTemp.filter((f) => f.endsWith("-tmp-uf.json"));
   const arquivosTempBR = arquivosTemp.filter((f) => f.endsWith("-tmp-br.json"));
 
-  const agruparPorTurnoECargo = async (arquivos) => {
-    const grupos = new Map();
+  const gruposUF = new Map();
 
-    for (const arquivo of arquivos) {
-      const municipios = await lerTemp(path.join(baseTmp, arquivo));
-      if (!municipios.length) continue;
-
-      for (const mu of municipios) {
-        const cdCargoNorm = normalizarCargo(mu.cdCargo);
-        const turno = String(mu.turno);
-        const chave = `${cdCargoNorm}-t${turno}`;
-
-        if (!grupos.has(chave)) {
-          grupos.set(chave, {
-            cdCargo: mu.cdCargo,
-            cdCargoNorm,
-            turno,
-            dgGeracao: mu.dgGeracao || null,
-            hgGeracao: mu.hgGeracao || null,
-            municipios: [],
-          });
-        }
-
-        grupos.get(chave).municipios.push(mu);
-      }
-    }
-
-    return grupos;
-  };
-
-  const gruposUF = await agruparPorTurnoECargo(arquivosTempUF);
-  const gruposBR = await agruparPorTurnoECargo(arquivosTempBR);
-
-  for (const [, grupo] of gruposUF) {
-    const { cdCargo, cdCargoNorm, turno, municipios } = grupo;
-
-    if (!CARGOS_UF.includes(cdCargoNorm)) continue;
-
-    const porUF = new Map();
+  for (const arquivo of arquivosTempUF) {
+    const municipios = await lerTemp(path.join(baseTmp, arquivo));
 
     for (const mu of municipios) {
+      const cdCargoNorm = normalizarCargo(mu.cdCargo);
+      if (!CARGOS_UF.includes(cdCargoNorm)) continue;
+
+      const turno = String(mu.turno);
       const uf = String(mu.uf).toUpperCase();
-      if (!porUF.has(uf)) porUF.set(uf, []);
-      porUF.get(uf).push(mu);
+      const chave = `${cdCargoNorm}-t${turno}-${uf}`;
+
+      if (!gruposUF.has(chave)) gruposUF.set(chave, novoGrupo(mu, uf));
+      acumularMunicipio(gruposUF.get(chave), mu);
     }
+  }
 
-    for (const [uf, municipiosUF] of porUF) {
-      const cdCargoArquivo = String(cdCargo).padStart(4, "0");
-      const dtRef = municipiosUF[municipiosUF.length - 1];
+  for (const [, grupo] of gruposUF) {
+    const { cdCargo, turno, uf, dgGeracao, hgGeracao } = grupo;
+    const cdCargoArquivo = String(cdCargo).padStart(4, "0");
 
-      const dados = somarMunicipios(municipiosUF);
-      const abr = construirAbr(
-        dados,
-        "uf",
-        uf,
-        municipiosUF,
-        dtRef?.dtTotalizacao || null,
-        dtRef?.htTotalizacao || null
-      );
+    const abr = construirAbr(grupo, "uf", uf);
+    const json = construirJsonTotalizacao(
+      cdEleicaoStr,
+      turno,
+      cdCargo,
+      dgGeracao,
+      hgGeracao,
+      abr
+    );
 
-      const json = construirJsonTotalizacao(
-        anoEleicao,
-        cdEleicaoStr,
-        turno,
-        cdCargo,
-        dtRef?.dgGeracao || null,
-        dtRef?.hgGeracao || null,
-        abr
-      );
+    const caminhoUF = path.join(
+      basePublic,
+      uf.toLowerCase(),
+      `${uf.toLowerCase()}-c${cdCargoArquivo}-e${cdEleicaoArquivo}-v.json`
+    );
 
-      const caminhoUF = path.join(
-        basePublic,
-        uf.toLowerCase(),
-        `${uf.toLowerCase()}-c${cdCargoArquivo}-e${cdEleicaoArquivo}-v.json`
-      );
+    await salvarJson(caminhoUF, json);
 
-      await salvarJson(caminhoUF, json);
+    grupo.candidatosPorMunicipio = [];
 
-      logger.info(`[Consolidar] Arquivo UF gerado`, {
-        uf,
-        cargo: cdCargo,
-        turno,
-        caminho: caminhoUF,
-      });
+    logger.info(`[Consolidar] Arquivo UF gerado`, {
+      uf,
+      cargo: cdCargo,
+      turno,
+      caminho: caminhoUF,
+    });
+  }
+
+  const gruposBR = new Map();
+
+  for (const arquivo of arquivosTempBR) {
+    const municipios = await lerTemp(path.join(baseTmp, arquivo));
+
+    for (const mu of municipios) {
+      const cdCargoNorm = normalizarCargo(mu.cdCargo);
+      if (!CARGOS_BR.includes(cdCargoNorm)) continue;
+
+      const turno = String(mu.turno);
+      const chave = `${cdCargoNorm}-t${turno}`;
+
+      if (!gruposBR.has(chave)) gruposBR.set(chave, novoGrupo(mu, "BR"));
+      acumularMunicipio(gruposBR.get(chave), mu);
     }
   }
 
   for (const [, grupo] of gruposBR) {
-    const { cdCargo, cdCargoNorm, turno, municipios } = grupo;
-
-    if (!CARGOS_BR.includes(cdCargoNorm)) continue;
-
+    const { cdCargo, turno, dgGeracao, hgGeracao } = grupo;
     const cdCargoArquivo = String(cdCargo).padStart(4, "0");
-    const dtRef = municipios[municipios.length - 1];
 
-    const dados = somarMunicipios(municipios);
-    const abr = construirAbr(
-      dados,
-      "br",
-      "br",
-      municipios,
-      dtRef?.dtTotalizacao || null,
-      dtRef?.htTotalizacao || null
-    );
-
+    const abr = construirAbr(grupo, "br", "br");
     const json = construirJsonTotalizacao(
-      anoEleicao,
       cdEleicaoStr,
       turno,
       cdCargo,
-      dtRef?.dgGeracao || null,
-      dtRef?.hgGeracao || null,
+      dgGeracao,
+      hgGeracao,
       abr
     );
 
@@ -407,6 +394,8 @@ export const consolidarUFeBR = async (anoEleicao, cdEleicao) => {
     );
 
     await salvarJson(caminhoBR, json);
+
+    grupo.candidatosPorMunicipio = [];
 
     logger.info(`[Consolidar] Arquivo BR gerado`, {
       cargo: cdCargo,
