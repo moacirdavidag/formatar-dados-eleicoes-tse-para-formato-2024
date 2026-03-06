@@ -43,6 +43,29 @@ async function carregarCodigosEleicoes() {
     });
 }
 
+function renderApuracao(data) {
+  const s = data.s;
+  if (!s) return;
+
+  const total = Number(s.ts);
+  const apuradas = Number(s.st);
+  const percent = Number(s.pstn || s.pst.replace(",", "."));
+
+  document.getElementById("secoesApuradas").textContent = formatBR(apuradas);
+  document.getElementById("secoesTotal").textContent = formatBR(total);
+
+  document.getElementById("apuracaoPercent").textContent =
+    percent.toFixed(1) + "%";
+
+  const bar = document.getElementById("apuracaoBarFill");
+
+  bar.style.width = "0%";
+
+  setTimeout(() => {
+    bar.style.width = percent + "%";
+  }, 50);
+}
+
 function getCodigoEleicao(ano, turno, cargo) {
   if (!CODIGOS_ELEICOES?.[ano]) return null;
 
@@ -52,7 +75,12 @@ function getCodigoEleicao(ano, turno, cargo) {
     return CODIGOS_ELEICOES[ano]?.federal?.[turno] || null;
   }
 
-  if (cargoStr === "3" || cargoStr === "5" || cargoStr === "6" || cargoStr === "7") {
+  if (
+    cargoStr === "3" ||
+    cargoStr === "5" ||
+    cargoStr === "6" ||
+    cargoStr === "7"
+  ) {
     return CODIGOS_ELEICOES[ano]?.estadual?.[turno] || null;
   }
 
@@ -380,6 +408,7 @@ function renderResultados(data, filters) {
       </div>
     </div>
   `;
+  renderApuracao(data);
   renderEstatisticas(data);
   renderCandidatos(data, filters);
   resultsEl.classList.remove("d-none");
