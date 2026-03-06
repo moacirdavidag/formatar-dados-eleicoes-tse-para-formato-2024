@@ -100,7 +100,7 @@ export const importarCSV = async (req, res) => {
   }
 };
 
-import { createCanvas } from 'canvas';
+import { createCanvas } from "canvas";
 
 export const gerarOgImage = async (req, res) => {
   try {
@@ -108,68 +108,69 @@ export const gerarOgImage = async (req, res) => {
 
     const width = 1200;
     const height = 630;
+
     const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
 
     const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, '#f8fafc');
-    gradient.addColorStop(1, '#f1f5f9');
+    gradient.addColorStop(0, "#0f172a");
+    gradient.addColorStop(1, "#1e3a8a");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < width; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, height);
-      ctx.stroke();
-    }
-    for (let i = 0; i < height; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(width, i);
-      ctx.stroke();
-    }
+    const accent = ctx.createLinearGradient(0, 0, 300, 0);
+    accent.addColorStop(0, "#16a34a");
+    accent.addColorStop(1, "#22c55e");
+    ctx.fillStyle = accent;
+    ctx.fillRect(80, 110, 140, 8);
 
-    ctx.fillStyle = '#1e293b';
-    ctx.textAlign = 'left';
-    
-    ctx.font = 'bold 32pt sans-serif';
-    ctx.fillText(`ELEIÇÕES ${ano}`, 80, 100);
+    ctx.textAlign = "left";
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = '24pt sans-serif';
-    ctx.fillText(`${turno}º TURNO • RESULTADOS HISTÓRICOS`, 80, 150);
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "600 28pt sans-serif";
+    ctx.fillText(`ELEIÇÕES ${ano}`, 80, 90);
 
-    ctx.beginPath();
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 8;
-    ctx.moveTo(80, 190);
-    ctx.lineTo(200, 190);
-    ctx.stroke();
+    ctx.fillStyle = "#cbd5f5";
+    ctx.font = "20pt sans-serif";
+    ctx.fillText(`${turno}º TURNO • RESULTADOS`, 80, 160);
 
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 70pt sans-serif';
-    const textoCargo = (cargo || 'CARGO').toUpperCase();
-    ctx.fillText(textoCargo, 80, 320);
+    const textoCargo = (cargo || "CARGO").toUpperCase();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 82pt sans-serif";
+    ctx.fillText(textoCargo, 80, 330);
 
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 50pt sans-serif';
     const local = `${cidade} / ${uf}`.toUpperCase();
+    ctx.fillStyle = "#fde047";
+    ctx.font = "bold 48pt sans-serif";
     ctx.fillText(local, 80, 420);
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '18pt sans-serif';
-    ctx.fillText('FONTE: DADOS OFICIAIS TSE', 80, 550);
+    ctx.fillStyle = "#93c5fd";
+    ctx.font = "22pt sans-serif";
+    ctx.fillText("Quem venceu essa disputa?", 80, 500);
 
-    const buffer = canvas.toBuffer('image/png');
-    res.set('Content-Type', 'image/png');
-    res.set('Cache-Control', 'public, max-age=604800');
+    ctx.fillStyle = "#1e40af";
+    ctx.fillRect(0, 540, width, 1);
+
+    ctx.font = "18pt sans-serif";
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("Fonte: Dados oficiais TSE", 80, 585);
+
+    ctx.textAlign = "right";
+    ctx.fillText(
+      "Aplicação: Moacir David • moacirdavidag.com",
+      width - 80,
+      585
+    );
+
+    const buffer = canvas.toBuffer("image/png");
+
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "public, max-age=604800");
+
     return res.send(buffer);
-
   } catch (err) {
     res.status(500).send("Erro ao gerar imagem");
   }
 };
-

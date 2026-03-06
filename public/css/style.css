@@ -504,3 +504,26 @@ body {
   background: linear-gradient(90deg, #16a34a, #4ade80);
   transition: width 1.2s ease-in-out;
 }
+
+.dados-info {
+  margin-top: 40px;
+  padding: 18px 22px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #64748b;
+  border-top: 1px solid #e2e8f0;
+  max-width: 900px;
+}
+
+.dados-info p {
+  margin: 6px 0;
+}
+
+.dados-info a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.dados-info a:hover {
+  text-decoration: underline;
+}
