@@ -1,0 +1,18 @@
+{
+    "2022": {
+        "turnos": {
+            "1": 545,
+            "2": 546
+        },
+        "cargos": {
+            "1": "Presidente",
+            "2": "Vice-Presidente",
+            "3": "Governador",
+            "4": "Vice-Governador",
+            "5": "Senador",
+            "6": "Deputado Federal",
+            "7": "Deputado Estadual",
+            "8": "Deputado Distrital"
+        }
+    }
+}

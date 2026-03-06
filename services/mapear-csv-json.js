@@ -5,13 +5,10 @@ import { Worker } from "worker_threads";
 import iconv from "iconv-lite";
 import logger from "../logger.config.js";
 import { gerarCodigosEleicoes } from "../shared/gerarCodigosEleicoes.js";
+import { consolidarUFeBR } from "../workers/consolidar-uf-br.js";
 
 const WORKERS = 2;
 const BATCH_SIZE = 500;
-const workerTotalizacaoPath = new URL(
-  "../workers/workerTotalizacao.js",
-  import.meta.url
-);
 
 const appendEstado = (estadoSigla, nomeEstado) => {
   const dir = path.join(process.cwd(), "public");
@@ -71,7 +68,7 @@ const criarPool = (anoEleicao) => {
         : Number(anoEleicao) === 2012
         ? new URL("../workers/workerEleicoes2012.js", import.meta.url)
         : new URL("../workers/workerAdapterEA10.js", import.meta.url);
-  
+
     workers.push({
       worker: new Worker(workerPath, { type: "module" }),
       ocupado: false,
@@ -115,14 +112,11 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
     const { caminhoDetalhe, caminhoCandidatos } = caminhos;
     const detalheIndex = await streamDetalhe(caminhoDetalhe);
     const pool = criarPool(anoEleicao);
-    const totalizacaoWorker = new Worker(workerTotalizacaoPath, {
-      type: "module",
-    });
     const norm = (v) => String(Number(v || 0));
     const cidades = new Map();
     let totalCidades = 0;
     let cidadesProcessadas = 0;
-
+    let cdEleicaoDetectado = null;
 
     const enviarWorker = (item) =>
       new Promise((resolve) => {
@@ -143,10 +137,6 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
                 appendEstado(msg.estado, msg.nomeEstado);
               if (msg.cidade && msg.estado)
                 appendCidade(msg.estado, msg.cidade);
-              await new Promise((res) => {
-                totalizacaoWorker.once("message", () => res());
-                totalizacaoWorker.postMessage(item.cidade);
-              });
             } else {
               logger.error(`[Mapeamento CSV-JSON] Erro cidade`, {
                 idCidade: item.idCidade,
@@ -189,6 +179,11 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
             stream.resume();
             return;
           }
+
+          if (!cdEleicaoDetectado && cand.CD_ELEICAO) {
+            cdEleicaoDetectado = String(cand.CD_ELEICAO);
+          }
+
           const idCidade = [
             cand.CD_ELEICAO,
             cand.CD_MUNICIPIO,
@@ -218,7 +213,15 @@ const mapearCSVJSON = async (caminhos, anoEleicao, callback) => {
     });
 
     for (const p of pool) p.worker.terminate();
-    await totalizacaoWorker.terminate();
+
+    if (cdEleicaoDetectado) {
+      await consolidarUFeBR(anoEleicao, cdEleicaoDetectado);
+    } else {
+      logger.warn(
+        `[Mapeamento CSV-JSON] cdEleicao não detectado, consolidação UF/BR ignorada`
+      );
+    }
+
     await gerarCodigosEleicoes();
     logger.info(`[Mapeamento CSV-JSON] Finalizado com sucesso`, { anoEleicao });
   } catch (erro) {

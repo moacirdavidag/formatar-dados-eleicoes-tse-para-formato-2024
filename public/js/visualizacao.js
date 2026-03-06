@@ -116,7 +116,6 @@ async function setEstado(uf) {
   if (!uf) return;
   const resp = await fetch(`/cidades_${uf}.json`);
   const cidades = await resp.json();
-  console.log(`Total cidades: ${cidades.length}`);
   cidades.sort((a, b) => a.nome.localeCompare(b.nome));
   cidades.forEach((c) => {
     const opt = document.createElement("option");
@@ -144,7 +143,11 @@ async function applyFiltersFromQuery() {
   ) {
     filterCargo.disabled = false;
     btnBuscar.disabled = false;
-    btnBuscar.click();
+
+    if (window.__INITIAL_DATA__) {
+      const { data, filters: f } = window.__INITIAL_DATA__;
+      renderResultados(data, { ...f, skipCargoFilter: true });
+    }
   }
 }
 
@@ -153,6 +156,7 @@ function renderCandidatos(data, filters) {
   if (Array.isArray(data?.carg)) {
     data.carg
       .filter((cargo) => {
+        if (filters.skipCargoFilter) return true;
         const codigo = String(cargo?.cd || "");
         const ano = filters.ano;
         if (!CODIGOS_ELEICOES?.[ano]?.cargos?.[codigo]) return false;
@@ -198,9 +202,7 @@ function renderCandidatos(data, filters) {
           : "#6b7280";
 
       let baseImg = null;
-
-      const isPresidencial = filterCargo.value === "1";
-
+      const isPresidencial = filters.cargo === "1";
       const ufFoto = isPresidencial ? "BR" : filters.estado;
 
       if (String(filters.ano) === "2024") {
@@ -212,7 +214,6 @@ function renderCandidatos(data, filters) {
       }
 
       const extensions = ["jpg", "jpeg", "png", "webp"];
-
       const card = document.createElement("div");
       card.classList.add("candidate-card");
 
@@ -263,7 +264,6 @@ function renderCandidatos(data, filters) {
       img.onerror = () => {
         index++;
         tryLoad();
-        console.log(`URL Imagem: ${img.src}`);
       };
 
       tryLoad();
@@ -304,7 +304,6 @@ function renderCandidatos(data, filters) {
 
       let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
       let end = Math.min(totalPages, start + maxVisible - 1);
-
       if (end - start < maxVisible - 1)
         start = Math.max(1, end - maxVisible + 1);
 
@@ -336,9 +335,14 @@ function renderCandidatos(data, filters) {
 
 function renderResultados(data, filters) {
   const cidadeNome =
-    filterMunicipio.options[filterMunicipio.selectedIndex]?.text || "";
+    filters.municipioNome ||
+    filterMunicipio.options[filterMunicipio.selectedIndex]?.text ||
+    "";
+  const cargoNome =
+    filters.cargoNome ||
+    filterCargo.options[filterCargo.selectedIndex]?.text ||
+    "";
   const ufSigla = filters.estado;
-  const cargoNome = filterCargo.options[filterCargo.selectedIndex]?.text || "";
   headerResultadoEl.innerHTML = `
     <div class="resultado-header">
       <div class="cidade">${cidadeNome}, ${ufSigla}</div>
@@ -386,8 +390,7 @@ function renderEstatisticas(data) {
 }
 
 filterAno?.addEventListener("change", async () => {
-  const ano = filterAno.value;
-  await setAno(ano);
+  await setAno(filterAno.value);
 });
 
 filterTurno?.addEventListener("change", () => {
@@ -397,8 +400,7 @@ filterTurno?.addEventListener("change", () => {
 });
 
 filterEstado?.addEventListener("change", async () => {
-  const uf = filterEstado.value;
-  await setEstado(uf);
+  await setEstado(filterEstado.value);
 });
 
 filterMunicipio?.addEventListener("change", () => {
@@ -410,36 +412,15 @@ filterCargo?.addEventListener("change", () => {
   btnBuscar.disabled = !filterCargo.value;
 });
 
-btnBuscar?.addEventListener("click", async () => {
-  loadingEl.style.display = "block";
-  fallbackEl.style.display = "none";
-  resultsEl.classList.add("d-none");
-  candidatesEl.innerHTML = "";
-  paginationEl.innerHTML = "";
-  const filters = {
+btnBuscar?.addEventListener("click", () => {
+  const params = new URLSearchParams({
     ano: filterAno.value,
     turno: filterTurno.value,
     estado: filterEstado.value,
     municipio: filterMunicipio.value,
     cargo: filterCargo.value,
-  };
-  setQueryParams(filters);
-  try {
-    const res = await fetch("/dados", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(filters),
-    });
-    if (!res.ok) throw new Error("Erro API");
-    const data = await res.json();
-    renderResultados(data, filters);
-  } catch (err) {
-    console.log(err);
-    fallbackEl.textContent = "Erro ao carregar os dados.";
-    fallbackEl.style.display = "block";
-  } finally {
-    loadingEl.style.display = "none";
-  }
+  });
+  window.location.href = `/dados?${params.toString()}`;
 });
 
 btnLimpar?.addEventListener("click", () => {

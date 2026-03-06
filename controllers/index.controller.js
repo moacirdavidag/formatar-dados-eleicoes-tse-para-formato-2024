@@ -99,3 +99,77 @@ export const importarCSV = async (req, res) => {
     } catch {}
   }
 };
+
+import { createCanvas } from 'canvas';
+
+export const gerarOgImage = async (req, res) => {
+  try {
+    const { ano, turno, cargo, cidade, uf } = req.query;
+
+    const width = 1200;
+    const height = 630;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, '#f8fafc');
+    gradient.addColorStop(1, '#f1f5f9');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < width; i += 40) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, height);
+      ctx.stroke();
+    }
+    for (let i = 0; i < height; i += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(width, i);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#1e293b';
+    ctx.textAlign = 'left';
+    
+    ctx.font = 'bold 32pt sans-serif';
+    ctx.fillText(`ELEIÇÕES ${ano}`, 80, 100);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '24pt sans-serif';
+    ctx.fillText(`${turno}º TURNO • RESULTADOS HISTÓRICOS`, 80, 150);
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 8;
+    ctx.moveTo(80, 190);
+    ctx.lineTo(200, 190);
+    ctx.stroke();
+
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 70pt sans-serif';
+    const textoCargo = (cargo || 'CARGO').toUpperCase();
+    ctx.fillText(textoCargo, 80, 320);
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 50pt sans-serif';
+    const local = `${cidade} / ${uf}`.toUpperCase();
+    ctx.fillText(local, 80, 420);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '18pt sans-serif';
+    ctx.fillText('FONTE: DADOS OFICIAIS TSE', 80, 550);
+
+    const buffer = canvas.toBuffer('image/png');
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=604800');
+    return res.send(buffer);
+
+  } catch (err) {
+    res.status(500).send("Erro ao gerar imagem");
+  }
+};
+

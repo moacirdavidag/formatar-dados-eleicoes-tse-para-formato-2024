@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,6 +17,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 app.use(express.static(path.join(__dirname, "public")));
+
+app.use((req, res, next) => {
+  res.locals.URL_SITE_BASE =
+    process.env.URL_SITE_BASE || "http://localhost:3000";
+  next();
+});
 
 app.engine(
   "hbs",

@@ -90,4 +90,20 @@
 
 </div>
 
+{{#if data}}
+<script>
+  window.__INITIAL_DATA__ = {
+    data: {{{jsonData}}},
+    filters: {
+      ano: "{{filters.ano}}",
+      turno: "{{filters.turno}}",
+      estado: "{{filters.estado}}",
+      municipio: "{{filters.municipio}}",
+      municipioNome: "{{filters.municipioNome}}",
+      cargo: "{{filters.cargo}}",
+      cargoNome: "{{filters.cargoNome}}"
+    }
+  };
+</script>
+{{/if}}
 <script type="module" src="/js/visualizacao.js"></script>

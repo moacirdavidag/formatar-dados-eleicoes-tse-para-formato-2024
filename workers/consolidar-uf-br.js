@@ -13,35 +13,17 @@ const percentual = (p, t) => (!t || t === 0 ? null : (p / t) * 100);
 const formatPct = (n) => (n === null ? "0,00" : n.toFixed(2).replace(".", ","));
 
 const CARGOS_BR = ["1", "01", "001", "0001"];
-const CARGOS_UF = ["1", "01", "001", "0001", "3", "03", "003", "0003"];
+const CARGOS_UF = ["1", "01", "001", "0001", "3", "03", "003", "0003", "5", "05", "005", "0005", "6", "06", "006", "0006", "7", "07", "007", "0007", "8", "08", "008", "0008"];
 
 const normalizarCargo = (cd) => String(cd).replace(/^0+/, "") || "0";
-
-const registrarErro = async (anoEleicao, cdEleicao, contexto, erro) => {
-  try {
-    const dirLog = path.join(
-      process.cwd(),
-      "logs",
-      `ele${anoEleicao}`,
-      String(cdEleicao)
-    );
-    await fs.promises.mkdir(dirLog, { recursive: true });
-
-    const linha =
-      JSON.stringify({
-        ts: new Date().toISOString(),
-        ...contexto,
-        erro: erro.message,
-      }) + "\n";
-
-    await fs.promises.appendFile(path.join(dirLog, "erros.log"), linha, "utf8");
-  } catch (_) {}
-};
 
 const lerTemp = async (caminho) => {
   try {
     const conteudo = await fs.promises.readFile(caminho, "utf8");
-    return JSON.parse(conteudo);
+    return conteudo
+      .split("\n")
+      .filter((linha) => linha.trim())
+      .map((linha) => JSON.parse(linha));
   } catch (_) {
     return [];
   }
@@ -303,7 +285,7 @@ export const consolidarUFeBR = async (anoEleicao, cdEleicao) => {
   const arquivosTempUF = arquivosTemp.filter((f) => f.endsWith("-tmp-uf.json"));
   const arquivosTempBR = arquivosTemp.filter((f) => f.endsWith("-tmp-br.json"));
 
-  const agruparPorTurnoECargo = async (arquivos, baseTmp) => {
+  const agruparPorTurnoECargo = async (arquivos) => {
     const grupos = new Map();
 
     for (const arquivo of arquivos) {
@@ -333,10 +315,10 @@ export const consolidarUFeBR = async (anoEleicao, cdEleicao) => {
     return grupos;
   };
 
-  const gruposUF = await agruparPorTurnoECargo(arquivosTempUF, baseTmp);
-  const gruposBR = await agruparPorTurnoECargo(arquivosTempBR, baseTmp);
+  const gruposUF = await agruparPorTurnoECargo(arquivosTempUF);
+  const gruposBR = await agruparPorTurnoECargo(arquivosTempBR);
 
-  for (const [chave, grupo] of gruposUF) {
+  for (const [, grupo] of gruposUF) {
     const { cdCargo, cdCargoNorm, turno, municipios } = grupo;
 
     if (!CARGOS_UF.includes(cdCargoNorm)) continue;
@@ -350,7 +332,6 @@ export const consolidarUFeBR = async (anoEleicao, cdEleicao) => {
     }
 
     for (const [uf, municipiosUF] of porUF) {
-      const nomeUF = ESTADOS_BR[uf] || uf;
       const cdCargoArquivo = String(cdCargo).padStart(4, "0");
       const dtRef = municipiosUF[municipiosUF.length - 1];
 
@@ -391,7 +372,7 @@ export const consolidarUFeBR = async (anoEleicao, cdEleicao) => {
     }
   }
 
-  for (const [chave, grupo] of gruposBR) {
+  for (const [, grupo] of gruposBR) {
     const { cdCargo, cdCargoNorm, turno, municipios } = grupo;
 
     if (!CARGOS_BR.includes(cdCargoNorm)) continue;
