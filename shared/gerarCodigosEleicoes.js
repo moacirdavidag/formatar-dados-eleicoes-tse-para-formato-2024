@@ -42,13 +42,16 @@ export const gerarCodigosEleicoes = async () => {
 
       const codigos = await fs.readdir(anoPath, { withFileTypes: true });
 
-      const turnosTemp = new Set();
+      const federais = new Set();
+      const estaduais = new Set();
+      const municipais = new Set();
       const cargosTemp = {};
 
       for (const cod of codigos) {
         if (!cod.isDirectory()) continue;
 
         const codEleicao = cod.name;
+        const codigoEleicaoNum = parseInt(codEleicao, 10);
         const dadosPath = path.join(anoPath, codEleicao, "dados");
 
         try {
@@ -67,8 +70,20 @@ export const gerarCodigosEleicoes = async () => {
 
               if (!cargoNorm) return;
 
-              turnosTemp.add(parseInt(codEleicao, 10));
-              cargosTemp[cargoNorm.codigo] = cargoNorm.nome;
+              const cargoCodigo = cargoNorm.codigo;
+
+              // classificação por cargo
+              if (cargoCodigo === "1" || cargoCodigo === "6") {
+                federais.add(codigoEleicaoNum);
+              } 
+              else if (cargoCodigo === "3" || cargoCodigo === "5" || cargoCodigo === "7") {
+                estaduais.add(codigoEleicaoNum);
+              } 
+              else if (cargoCodigo === "11" || cargoCodigo === "13") {
+                municipais.add(codigoEleicaoNum);
+              }
+
+              cargosTemp[cargoCodigo] = cargoNorm.nome;
             });
           }
         } catch (err) {
@@ -76,15 +91,30 @@ export const gerarCodigosEleicoes = async () => {
         }
       }
 
-      const turnosOrdenados = Array.from(turnosTemp).sort((a, b) => a - b);
+      const federalOrdenado = Array.from(federais).sort((a, b) => a - b);
+      const estadualOrdenado = Array.from(estaduais).sort((a, b) => a - b);
+      const municipalOrdenado = Array.from(municipais).sort((a, b) => a - b);
 
-      const turnos = {};
-      turnosOrdenados.forEach((codigo, index) => {
-        turnos[index + 1] = codigo;
+      const federal = {};
+      const estadual = {};
+      const municipal = {};
+
+      federalOrdenado.forEach((codigo, index) => {
+        federal[index + 1] = codigo;
+      });
+
+      estadualOrdenado.forEach((codigo, index) => {
+        estadual[index + 1] = codigo;
+      });
+
+      municipalOrdenado.forEach((codigo, index) => {
+        municipal[index + 1] = codigo;
       });
 
       result[ano] = {
-        turnos,
+        federal,
+        estadual,
+        municipal,
         cargos: cargosTemp,
       };
 

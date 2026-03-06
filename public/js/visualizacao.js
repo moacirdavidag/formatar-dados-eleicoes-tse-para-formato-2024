@@ -43,6 +43,26 @@ async function carregarCodigosEleicoes() {
     });
 }
 
+function getCodigoEleicao(ano, turno, cargo) {
+  if (!CODIGOS_ELEICOES?.[ano]) return null;
+
+  const cargoStr = String(cargo);
+
+  if (cargoStr === "1") {
+    return CODIGOS_ELEICOES[ano]?.federal?.[turno] || null;
+  }
+
+  if (cargoStr === "3" || cargoStr === "5" || cargoStr === "6" || cargoStr === "7") {
+    return CODIGOS_ELEICOES[ano]?.estadual?.[turno] || null;
+  }
+
+  if (cargoStr === "11" || cargoStr === "13") {
+    return CODIGOS_ELEICOES[ano]?.municipal?.[turno] || null;
+  }
+
+  return null;
+}
+
 function getQueryParams() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -77,13 +97,21 @@ async function setAno(ano) {
 
   if (!ano) return;
 
-  Object.entries(CODIGOS_ELEICOES[ano].turnos).forEach(([key]) => {
-    if (Number(key) > 2) return;
-    const opt = document.createElement("option");
-    opt.value = key;
-    opt.textContent = key === "1" ? "1º Turno" : "2º Turno";
-    filterTurno.appendChild(opt);
-  });
+  const turnosDisponiveis = new Set([
+    ...Object.keys(CODIGOS_ELEICOES[ano].federal || {}),
+    ...Object.keys(CODIGOS_ELEICOES[ano].estadual || {}),
+  ]);
+
+  [...turnosDisponiveis]
+    .sort((a, b) => Number(a) - Number(b))
+    .forEach((key) => {
+      if (Number(key) > 2) return;
+
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = key === "1" ? "1º Turno" : "2º Turno";
+      filterTurno.appendChild(opt);
+    });
   filterTurno.disabled = false;
 
   filterCargo.innerHTML = '<option value="">Cargo</option>';
@@ -413,13 +441,21 @@ filterCargo?.addEventListener("change", () => {
 });
 
 btnBuscar?.addEventListener("click", () => {
+  const ano = filterAno.value;
+  const turno = filterTurno.value;
+  const cargo = filterCargo.value;
+
+  const codigoEleicao = getCodigoEleicao(ano, turno, cargo);
+
   const params = new URLSearchParams({
-    ano: filterAno.value,
-    turno: filterTurno.value,
+    ano,
+    turno,
     estado: filterEstado.value,
     municipio: filterMunicipio.value,
-    cargo: filterCargo.value,
+    cargo,
+    eleicao: codigoEleicao,
   });
+
   window.location.href = `/dados?${params.toString()}`;
 });
 

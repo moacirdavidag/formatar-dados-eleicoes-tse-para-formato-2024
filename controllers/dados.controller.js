@@ -11,6 +11,24 @@ const capitalize = (text) => {
     .join(" ");
 };
 
+const getCodigoEleicao = (CODIGOS_ELEICOES, ano, turno, cargo) => {
+  const cargoStr = String(cargo);
+
+  if (cargoStr === "1") {
+    return CODIGOS_ELEICOES?.[ano]?.federal?.[turno] || null;
+  }
+
+  if (cargoStr === "3" || cargoStr === "5" || cargoStr === "6" || cargoStr === "7") {
+    return CODIGOS_ELEICOES?.[ano]?.estadual?.[turno] || null;
+  }
+
+  if (cargoStr === "11" || cargoStr === "13") {
+    return CODIGOS_ELEICOES?.[ano]?.municipal?.[turno] || null;
+  }
+
+  return null;
+};
+
 const getNomeMunicipio = async (uf, codTSE) => {
   try {
     const filePath = path.join(
@@ -63,8 +81,7 @@ export const buscarDados = async (req, res) => {
       getNomeMunicipio(estado, municipio),
     ]);
 
-    const codEleicao = CODIGOS_ELEICOES?.[ano]?.turnos?.[turno];
-
+    const codEleicao = getCodigoEleicao(CODIGOS_ELEICOES, ano, turno, cargo);
     if (!codEleicao) {
       const anos = await getAnosDisponiveis();
       return res

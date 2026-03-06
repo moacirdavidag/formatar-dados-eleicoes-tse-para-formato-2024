@@ -52,9 +52,9 @@ const gerarSq = (cand, detalhe) => {
 };
 
 const registrarErro = async (anoEleicao, cdEleicao, contexto, erro) => {
-  try {
-    const uf = String(contexto.uf || "desconhecida").toLowerCase();
+  const uf = String(contexto.uf || "desconhecida").toLowerCase();
 
+  try {
     const dirLog = path.join(
       process.cwd(),
       "logs",
@@ -71,7 +71,14 @@ const registrarErro = async (anoEleicao, cdEleicao, contexto, erro) => {
       }) + "\n",
       "utf8"
     );
+  } catch (erroLog) {
+    logger.error(`[Worker] Falha ao gravar erros.log`, {
+      uf,
+      erro: erroLog.message,
+    });
+  }
 
+  try {
     const dirCidades = path.join(
       process.cwd(),
       "logs",
@@ -109,10 +116,17 @@ const registrarErro = async (anoEleicao, cdEleicao, contexto, erro) => {
         "utf8"
       );
     }
-  } catch (_) {}
+  } catch (erroCidades) {
+    logger.error(`[Worker] Falha ao gravar cidades.json de erros`, {
+      uf,
+      municipio: contexto.municipio,
+      erro: erroCidades.message,
+    });
+  }
 };
 
-const acumularTemp = async (caminhoTemp, entrada) => {
+const acumularTemp = async (baseTmp, caminhoTemp, entrada) => {
+  await fs.promises.mkdir(baseTmp, { recursive: true });
   await fs.promises.appendFile(
     caminhoTemp,
     JSON.stringify(entrada) + "\n",
@@ -603,6 +617,12 @@ const atualizarAbrangencia = async (
   await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
 };
 
+const CARGOS_BR = ["1", "01", "001", "0001"]; 
+
+const CARGOS_SUPORTADOS = [
+  "1", "3", "5", "6", "7", "8", "11", "13"
+];
+
 parentPort.on("message", async (workerData) => {
   const { detalhe, candidatos } = workerData;
 
@@ -626,7 +646,8 @@ parentPort.on("message", async (workerData) => {
     const nrZona = String(detalhe.NR_ZONA || detalhe.CD_ZONA || "0");
 
     const abrangencia = normalizarAbr(detalhe.TP_ABRANGENCIA);
-    const cdCargo = String(detalhe.CD_CARGO);
+    const cdCargo = String(detalhe.CD_CARGO).trim();
+    const cdCargoNorm = String(Number(cdCargo));
     const cdEleicaoArquivo = cdEleicao.padStart(6, "0");
 
     const baseData = path.join(
@@ -1053,11 +1074,18 @@ parentPort.on("message", async (workerData) => {
     const caminhoTempUF = path.join(baseTmp, `${chaveTemp}-tmp-uf.json`);
     const caminhoTempBR = path.join(baseTmp, `${chaveTemp}-tmp-br.json`);
 
-    await acumularTemp(caminhoTempUF, resumoMunicipio);
+    await acumularTemp(baseTmp, caminhoTempUF, resumoMunicipio);
 
-    const cargosBR = ["1", "01", "0001"];
-    if (cargosBR.includes(cdCargo)) {
-      await acumularTemp(caminhoTempBR, resumoMunicipio);
+    logger.info(`[Worker] Temp UF gravado`, {
+      caminho: caminhoTempUF,
+      cargo: cdCargo,
+      cargoNorm: cdCargoNorm,
+      ehBR: CARGOS_BR.includes(cdCargoNorm),
+    });
+
+    if (CARGOS_BR.includes(cdCargoNorm)) {
+      await acumularTemp(baseTmp, caminhoTempBR, resumoMunicipio);
+      logger.info(`[Worker] Temp BR gravado`, { caminho: caminhoTempBR });
     }
 
     logger.info(`[Worker] Processamento concluído`, {
@@ -1079,7 +1107,7 @@ parentPort.on("message", async (workerData) => {
       },
       resumoEstado: resumoMunicipio,
       tempUF: caminhoTempUF,
-      tempBR: cargosBR.includes(cdCargo) ? caminhoTempBR : null,
+      tempBR: CARGOS_BR.includes(cdCargoNorm) ? caminhoTempBR : null,
     });
   } catch (erro) {
     logger.error(`[Worker] Erro processamento cidade`, {
