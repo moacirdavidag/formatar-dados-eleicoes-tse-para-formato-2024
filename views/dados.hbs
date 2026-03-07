@@ -1,93 +1,176 @@
-<h1 class="page-title">Resultados das Eleições</h1>
+<div class="container-eleicoes">
 
-<div class="filters-card">
-  <div class="filters-grid">
+  <h1 class="page-title">Resultados das Eleições</h1>
 
-    <select id="filterAno" class="filter-select">
-      <option value="">Ano</option>
-      {{#each anos}}
-        <option value="{{this}}">{{this}}</option>
-      {{/each}}
-    </select>
+  <div class="filters-card">
+    <div class="filters-grid">
 
-    <select id="filterTurno" class="filter-select" disabled>
-      <option value="">Turno</option>
-    </select>
+      <select id="filterAno" class="filter-select">
+        <option value="">Ano</option>
+        {{#each anos}}
+          <option value="{{this}}">{{this}}</option>
+        {{/each}}
+      </select>
 
-    <select id="filterEstado" class="filter-select" disabled>
-      <option value="">Estado</option>
-    </select>
+      <select id="filterTurno" class="filter-select" disabled>
+        <option value="">Turno</option>
+      </select>
 
-    <select id="filterMunicipio" class="filter-select" disabled>
-      <option value="">Município</option>
-    </select>
+      <select id="filterEstado" class="filter-select" disabled>
+        <option value="">Estado</option>
+      </select>
 
-    <select id="filterCargo" class="filter-select" disabled>
-      <option value="">Cargo</option>
-    </select>
+      <select id="filterMunicipio" class="filter-select" disabled>
+        <option value="">Município</option>
+      </select>
 
-    <div class="filters-actions">
-      <button id="btnBuscar" class="btn-search" disabled>
-        <i class="bi bi-search"></i>
-        Buscar
-      </button>
+      <select id="filterCargo" class="filter-select" disabled>
+        <option value="">Cargo</option>
+      </select>
 
-      <button id="btnLimpar" class="btn-clear">
-        <i class="bi bi-x-circle"></i>
-      </button>
-    </div>
+      <div class="filters-actions">
+        <button id="btnBuscar" class="btn-search">
+          <i class="bi bi-search"></i>
+          Buscar
+        </button>
 
-  </div>
-</div>
-
-<div id="loading" class="loading-container" style="display:none;">
-  <div class="loading-spinner"></div>
-  <div class="loading-text">Carregando resultados...</div>
-</div>
-
-<div id="fallback" class="fallback">
-  Selecione os filtros e clique em buscar
-</div>
-
-<div id="results" class="results d-none">
-
-  <div id="headerResultado"></div>
-
-  <div id="candidates" class="candidates-grid"></div>
-
-  <div id="pagination" class="pagination"></div>
-
-  <div class="stats-card">
-    <div class="stats-grid" id="statsRow">
-
-      <div class="stat">
-        <div class="stat-label">Total de Votos</div>
-        <div id="totalVotos" class="stat-value"></div>
-      </div>
-
-      <div class="stat">
-        <div class="stat-label">Votos Válidos</div>
-        <div id="votosValidos" class="stat-value"></div>
-      </div>
-
-      <div class="stat">
-        <div class="stat-label">Votos Nulos</div>
-        <div id="votosNulos" class="stat-value"></div>
-      </div>
-
-      <div class="stat">
-        <div class="stat-label">Votos Brancos</div>
-        <div id="votosBrancos" class="stat-value"></div>
-      </div>
-
-      <div class="stat">
-        <div class="stat-label">Abstenções</div>
-        <div id="totalAbstencoes" class="stat-value"></div>
+        <button id="btnLimpar" class="btn-clear">
+          <i class="bi bi-x-circle"></i>
+        </button>
       </div>
 
     </div>
   </div>
 
+  <div id="loading" class="loading-container" style="display:none;">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Carregando resultados...</div>
+  </div>
+
+  <div id="fallback" class="fallback">
+    Selecione os filtros e clique em buscar
+  </div>
+
+  <div id="results" class="results d-none">
+
+    <div class="results-layout">
+
+      <div class="results-main">
+
+        <div id="headerResultado" class="resultado-header-card"></div>
+
+        <div id="secaoApuracao" class="apuracao-card">
+
+          <div class="apuracao-top">
+
+            <div class="apuracao-title">
+              Apuração das Seções
+            </div>
+
+            <div class="apuracao-percent">
+              <span id="apuracaoPercent">0%</span>
+            </div>
+
+          </div>
+
+          <div class="apuracao-bar">
+
+            <div id="apuracaoBarFill" class="apuracao-bar-fill"></div>
+
+          </div>
+
+          <div class="apuracao-stats">
+
+            <div class="apuracao-stat">
+              <div class="stat-label">Seções Apuradas</div>
+              <div id="secoesApuradas" class="stat-value"></div>
+            </div>
+
+            <div class="apuracao-stat">
+              <div class="stat-label">Total de Seções</div>
+              <div id="secoesTotal" class="stat-value"></div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div id="candidates" class="candidates-grid"></div>
+
+        <div id="pagination" class="pagination"></div>
+
+      </div>
+
+      <aside class="results-sidebar">
+
+        <div class="stats-card">
+
+          <div class="stats-grid">
+
+            <div class="stat">
+              <div class="stat-label">Total de Votos</div>
+              <div id="totalVotos" class="stat-value"></div>
+            </div>
+
+            <div class="stat">
+              <div class="stat-label">Votos Válidos</div>
+              <div id="votosValidos" class="stat-value"></div>
+            </div>
+
+            <div class="stat">
+              <div class="stat-label">Votos Nulos</div>
+              <div id="votosNulos" class="stat-value"></div>
+            </div>
+
+            <div class="stat">
+              <div class="stat-label">Votos Brancos</div>
+              <div id="votosBrancos" class="stat-value"></div>
+            </div>
+
+            <div class="stat">
+              <div class="stat-label">Abstenções</div>
+              <div id="totalAbstencoes" class="stat-value"></div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+
+  <div class="dados-info">
+    <p>
+      Os dados apresentados nesta página são provenientes do
+      <strong>Tribunal Superior Eleitoral (TSE)</strong>, por meio do Portal de
+      Dados Abertos. Esta aplicação realiza apenas o tratamento, organização e
+      visualização dessas informações para facilitar a consulta pública.
+    </p>
+
+    <p>
+      Caso identifique algum erro ou inconsistência, entre em contato pelo
+      e-mail
+      <a href="mailto:moacirdavidag@gmail.com">moacirdavidag@gmail.com</a>
+      ou por outros meios disponíveis em
+      <a href="https://moacirdavidag.com" target="_blank" rel="noopener">
+        moacirdavidag.com
+      </a>.
+    </p>
+  </div>
+
 </div>
+
+{{#if data}}
+  <script>
+    window.__INITIAL_DATA__ = { data:
+    {{{jsonData}}}, filters: { ano: "{{filters.ano}}", turno: "{{filters.turno}}",
+    estado: "{{filters.estado}}", municipio: "{{filters.municipio}}",
+    municipioNome: "{{filters.municipioNome}}", cargo: "{{filters.cargo}}",
+    cargoNome: "{{filters.cargoNome}}" } };
+  </script>
+{{/if}}
 
 <script type="module" src="/js/visualizacao.js"></script>

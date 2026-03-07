@@ -43,6 +43,54 @@ async function carregarCodigosEleicoes() {
     });
 }
 
+function renderApuracao(data) {
+  const s = data.s;
+  if (!s) return;
+
+  const total = Number(s.ts);
+  const apuradas = Number(s.st);
+  const percent = Number(s.pstn || s.pst.replace(",", "."));
+
+  document.getElementById("secoesApuradas").textContent = formatBR(apuradas);
+  document.getElementById("secoesTotal").textContent = formatBR(total);
+
+  document.getElementById("apuracaoPercent").textContent =
+    percent.toFixed(1) + "%";
+
+  const bar = document.getElementById("apuracaoBarFill");
+
+  bar.style.width = "0%";
+
+  setTimeout(() => {
+    bar.style.width = percent + "%";
+  }, 50);
+}
+
+function getCodigoEleicao(ano, turno, cargo) {
+  if (!CODIGOS_ELEICOES?.[ano]) return null;
+
+  const cargoStr = String(cargo);
+
+  if (cargoStr === "1") {
+    return CODIGOS_ELEICOES[ano]?.federal?.[turno] || null;
+  }
+
+  if (
+    cargoStr === "3" ||
+    cargoStr === "5" ||
+    cargoStr === "6" ||
+    cargoStr === "7"
+  ) {
+    return CODIGOS_ELEICOES[ano]?.estadual?.[turno] || null;
+  }
+
+  if (cargoStr === "11" || cargoStr === "13") {
+    return CODIGOS_ELEICOES[ano]?.municipal?.[turno] || null;
+  }
+
+  return null;
+}
+
 function getQueryParams() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -77,13 +125,21 @@ async function setAno(ano) {
 
   if (!ano) return;
 
-  Object.entries(CODIGOS_ELEICOES[ano].turnos).forEach(([key]) => {
-    if (Number(key) > 2) return;
-    const opt = document.createElement("option");
-    opt.value = key;
-    opt.textContent = key === "1" ? "1º Turno" : "2º Turno";
-    filterTurno.appendChild(opt);
-  });
+  const turnosDisponiveis = new Set([
+    ...Object.keys(CODIGOS_ELEICOES[ano].federal || {}),
+    ...Object.keys(CODIGOS_ELEICOES[ano].estadual || {}),
+  ]);
+
+  [...turnosDisponiveis]
+    .sort((a, b) => Number(a) - Number(b))
+    .forEach((key) => {
+      if (Number(key) > 2) return;
+
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = key === "1" ? "1º Turno" : "2º Turno";
+      filterTurno.appendChild(opt);
+    });
   filterTurno.disabled = false;
 
   filterCargo.innerHTML = '<option value="">Cargo</option>';
@@ -116,7 +172,6 @@ async function setEstado(uf) {
   if (!uf) return;
   const resp = await fetch(`/cidades_${uf}.json`);
   const cidades = await resp.json();
-  console.log(`Total cidades: ${cidades.length}`);
   cidades.sort((a, b) => a.nome.localeCompare(b.nome));
   cidades.forEach((c) => {
     const opt = document.createElement("option");
@@ -144,7 +199,11 @@ async function applyFiltersFromQuery() {
   ) {
     filterCargo.disabled = false;
     btnBuscar.disabled = false;
-    btnBuscar.click();
+
+    if (window.__INITIAL_DATA__) {
+      const { data, filters: f } = window.__INITIAL_DATA__;
+      renderResultados(data, { ...f, skipCargoFilter: true });
+    }
   }
 }
 
@@ -153,6 +212,7 @@ function renderCandidatos(data, filters) {
   if (Array.isArray(data?.carg)) {
     data.carg
       .filter((cargo) => {
+        if (filters.skipCargoFilter) return true;
         const codigo = String(cargo?.cd || "");
         const ano = filters.ano;
         if (!CODIGOS_ELEICOES?.[ano]?.cargos?.[codigo]) return false;
@@ -198,9 +258,7 @@ function renderCandidatos(data, filters) {
           : "#6b7280";
 
       let baseImg = null;
-
-      const isPresidencial = filterCargo.value === "1";
-
+      const isPresidencial = filters.cargo === "1";
       const ufFoto = isPresidencial ? "BR" : filters.estado;
 
       if (String(filters.ano) === "2024") {
@@ -212,7 +270,6 @@ function renderCandidatos(data, filters) {
       }
 
       const extensions = ["jpg", "jpeg", "png", "webp"];
-
       const card = document.createElement("div");
       card.classList.add("candidate-card");
 
@@ -263,7 +320,6 @@ function renderCandidatos(data, filters) {
       img.onerror = () => {
         index++;
         tryLoad();
-        console.log(`URL Imagem: ${img.src}`);
       };
 
       tryLoad();
@@ -304,7 +360,6 @@ function renderCandidatos(data, filters) {
 
       let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
       let end = Math.min(totalPages, start + maxVisible - 1);
-
       if (end - start < maxVisible - 1)
         start = Math.max(1, end - maxVisible + 1);
 
@@ -336,9 +391,14 @@ function renderCandidatos(data, filters) {
 
 function renderResultados(data, filters) {
   const cidadeNome =
-    filterMunicipio.options[filterMunicipio.selectedIndex]?.text || "";
+    filters.municipioNome ||
+    filterMunicipio.options[filterMunicipio.selectedIndex]?.text ||
+    "";
+  const cargoNome =
+    filters.cargoNome ||
+    filterCargo.options[filterCargo.selectedIndex]?.text ||
+    "";
   const ufSigla = filters.estado;
-  const cargoNome = filterCargo.options[filterCargo.selectedIndex]?.text || "";
   headerResultadoEl.innerHTML = `
     <div class="resultado-header">
       <div class="cidade">${cidadeNome}, ${ufSigla}</div>
@@ -348,6 +408,7 @@ function renderResultados(data, filters) {
       </div>
     </div>
   `;
+  renderApuracao(data);
   renderEstatisticas(data);
   renderCandidatos(data, filters);
   resultsEl.classList.remove("d-none");
@@ -386,8 +447,7 @@ function renderEstatisticas(data) {
 }
 
 filterAno?.addEventListener("change", async () => {
-  const ano = filterAno.value;
-  await setAno(ano);
+  await setAno(filterAno.value);
 });
 
 filterTurno?.addEventListener("change", () => {
@@ -397,8 +457,7 @@ filterTurno?.addEventListener("change", () => {
 });
 
 filterEstado?.addEventListener("change", async () => {
-  const uf = filterEstado.value;
-  await setEstado(uf);
+  await setEstado(filterEstado.value);
 });
 
 filterMunicipio?.addEventListener("change", () => {
@@ -410,36 +469,23 @@ filterCargo?.addEventListener("change", () => {
   btnBuscar.disabled = !filterCargo.value;
 });
 
-btnBuscar?.addEventListener("click", async () => {
-  loadingEl.style.display = "block";
-  fallbackEl.style.display = "none";
-  resultsEl.classList.add("d-none");
-  candidatesEl.innerHTML = "";
-  paginationEl.innerHTML = "";
-  const filters = {
-    ano: filterAno.value,
-    turno: filterTurno.value,
+btnBuscar?.addEventListener("click", () => {
+  const ano = filterAno.value;
+  const turno = filterTurno.value;
+  const cargo = filterCargo.value;
+
+  const codigoEleicao = getCodigoEleicao(ano, turno, cargo);
+
+  const params = new URLSearchParams({
+    ano,
+    turno,
     estado: filterEstado.value,
     municipio: filterMunicipio.value,
-    cargo: filterCargo.value,
-  };
-  setQueryParams(filters);
-  try {
-    const res = await fetch("/dados", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(filters),
-    });
-    if (!res.ok) throw new Error("Erro API");
-    const data = await res.json();
-    renderResultados(data, filters);
-  } catch (err) {
-    console.log(err);
-    fallbackEl.textContent = "Erro ao carregar os dados.";
-    fallbackEl.style.display = "block";
-  } finally {
-    loadingEl.style.display = "none";
-  }
+    cargo,
+    eleicao: codigoEleicao,
+  });
+
+  window.location.href = `/dados?${params.toString()}`;
 });
 
 btnLimpar?.addEventListener("click", () => {

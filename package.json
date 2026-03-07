@@ -14,7 +14,9 @@
   "description": "",
   "dependencies": {
     "body-parser": "^2.2.2",
+    "canvas": "^3.2.1",
     "csv-parser": "^3.2.0",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-handlebars": "^8.0.2",
     "iconv-lite": "^0.7.2",

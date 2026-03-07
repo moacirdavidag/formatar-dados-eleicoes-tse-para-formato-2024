@@ -1,0 +1,19 @@
+{
+  "2022": {
+    "federal": {
+      "1": 544,
+      "2": 545
+    },
+    "estadual": {
+      "1": 546,
+      "2": 547
+    },
+    "cargos": {
+      "1": "Presidente",
+      "3": "Governador",
+      "5": "Senador",
+      "6": "Deputado Federal",
+      "7": "Deputado Estadual"
+    }
+  }
+}

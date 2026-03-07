@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { importarCSV } from "../controllers/index.controller.js";
+import { gerarOgImage, importarCSV } from "../controllers/index.controller.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -27,5 +27,6 @@ router.post(
   ]),
   importarCSV
 );
+router.get('/api/og-image', gerarOgImage);
 
 export default router;

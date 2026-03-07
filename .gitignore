@@ -9,3 +9,4 @@ public/arquivos
 public/*.zip
 tmp/*
 tmp
+.env

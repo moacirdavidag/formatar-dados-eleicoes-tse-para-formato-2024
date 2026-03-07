@@ -5,37 +5,6 @@ import logger from "../logger.config.js";
 import { texto } from "../shared/functions.js";
 import ESTADOS_BR from "../shared/estados_BR.js";
 
-const atualizarCodigosEleicoes = async (anoEleicao, cdEleicao, turno, cdCargo, dsCargo) => {
-  const caminho = path.join(process.cwd(), "public", "js", "codigos_eleicoes.json");
-
-  await fs.promises.mkdir(path.dirname(caminho), { recursive: true });
-
-  let dados = {};
-
-  try {
-    const conteudo = await fs.promises.readFile(caminho, "utf8");
-    dados = JSON.parse(conteudo);
-  } catch (_) {}
-
-  const ano = Number(anoEleicao);
-  const t = Number(turno);
-  const cd = Number(cdCargo);
-
-  if (!dados[ano]) {
-    dados[ano] = { turnos: {}, cargos: {} };
-  }
-
-  if (!dados[ano].turnos[t] || dados[ano].turnos[t] === null) {
-    dados[ano].turnos[t] = Number(cdEleicao);
-  }
-
-  if (!dados[ano].cargos[cd]) {
-    dados[ano].cargos[cd] = nomeCargo(cdCargo) || texto(dsCargo);
-  }
-
-  await fs.promises.writeFile(caminho, JSON.stringify(dados, null, 2), "utf8");
-};
-
 const numero = (v) => {
   if (v === undefined || v === null || v === "") return 0;
   const n = Number(String(v).replace(",", "."));
@@ -83,6 +52,8 @@ const gerarSq = (cand, detalhe) => {
 };
 
 const registrarErro = async (anoEleicao, cdEleicao, contexto, erro) => {
+  const uf = String(contexto.uf || "desconhecida").toLowerCase();
+
   try {
     const dirLog = path.join(
       process.cwd(),
@@ -91,30 +62,76 @@ const registrarErro = async (anoEleicao, cdEleicao, contexto, erro) => {
       String(cdEleicao)
     );
     await fs.promises.mkdir(dirLog, { recursive: true });
-
-    const arquivoLog = path.join(dirLog, "erros.log");
-    const linha =
+    await fs.promises.appendFile(
+      path.join(dirLog, "erros.log"),
       JSON.stringify({
         ts: new Date().toISOString(),
         ...contexto,
         erro: erro.message,
-      }) + "\n";
-
-    await fs.promises.appendFile(arquivoLog, linha, "utf8");
-  } catch (_) {}
-};
-
-const acumularTemp = async (caminhoTemp, entrada) => {
-  let acumulado = [];
+      }) + "\n",
+      "utf8"
+    );
+  } catch (erroLog) {
+    logger.error(`[Worker] Falha ao gravar erros.log`, {
+      uf,
+      erro: erroLog.message,
+    });
+  }
 
   try {
-    const conteudo = await fs.promises.readFile(caminhoTemp, "utf8");
-    acumulado = JSON.parse(conteudo);
-  } catch (_) {}
+    const dirCidades = path.join(
+      process.cwd(),
+      "logs",
+      `ele${anoEleicao}`,
+      "erros",
+      uf
+    );
+    await fs.promises.mkdir(dirCidades, { recursive: true });
 
-  acumulado.push(entrada);
+    const caminhoCidades = path.join(dirCidades, "cidades.json");
 
-  await fs.promises.writeFile(caminhoTemp, JSON.stringify(acumulado), "utf8");
+    let cidades = [];
+    try {
+      const conteudo = await fs.promises.readFile(caminhoCidades, "utf8");
+      cidades = JSON.parse(conteudo);
+    } catch (_) {}
+
+    const jaExiste = cidades.some(
+      (c) => c.municipio === contexto.municipio && c.cargo === contexto.cargo
+    );
+
+    if (!jaExiste) {
+      cidades.push({
+        ts: new Date().toISOString(),
+        municipio: contexto.municipio,
+        uf: contexto.uf,
+        cargo: contexto.cargo,
+        turno: contexto.turno,
+        erro: erro.message,
+      });
+
+      await fs.promises.writeFile(
+        caminhoCidades,
+        JSON.stringify(cidades, null, 2),
+        "utf8"
+      );
+    }
+  } catch (erroCidades) {
+    logger.error(`[Worker] Falha ao gravar cidades.json de erros`, {
+      uf,
+      municipio: contexto.municipio,
+      erro: erroCidades.message,
+    });
+  }
+};
+
+const acumularTemp = async (baseTmp, caminhoTemp, entrada) => {
+  await fs.promises.mkdir(baseTmp, { recursive: true });
+  await fs.promises.appendFile(
+    caminhoTemp,
+    JSON.stringify(entrada) + "\n",
+    "utf8"
+  );
 };
 
 const IBGE_CACHE_DIR = path.join(process.cwd(), "tmp", "ibge-cache");
@@ -380,6 +397,48 @@ const NOMES_CARGO = {
 
 const nomeCargo = (cd) => NOMES_CARGO[String(Number(cd))] || texto(cd);
 
+const atualizarCodigosEleicoes = async (
+  anoEleicao,
+  cdEleicao,
+  turno,
+  cdCargo,
+  dsCargo
+) => {
+  const caminho = path.join(
+    process.cwd(),
+    "public",
+    "js",
+    "codigos_eleicoes.json"
+  );
+
+  await fs.promises.mkdir(path.dirname(caminho), { recursive: true });
+
+  let dados = {};
+
+  try {
+    const conteudo = await fs.promises.readFile(caminho, "utf8");
+    dados = JSON.parse(conteudo);
+  } catch (_) {}
+
+  const ano = Number(anoEleicao);
+  const t = Number(turno);
+  const cd = Number(cdCargo);
+
+  if (!dados[ano]) {
+    dados[ano] = { turnos: {}, cargos: {} };
+  }
+
+  if (!dados[ano].turnos[t] || dados[ano].turnos[t] === null) {
+    dados[ano].turnos[t] = Number(cdEleicao);
+  }
+
+  if (!dados[ano].cargos[cd]) {
+    dados[ano].cargos[cd] = nomeCargo(cdCargo) || texto(dsCargo);
+  }
+
+  await fs.promises.writeFile(caminho, JSON.stringify(dados, null, 2), "utf8");
+};
+
 const atualizarEleitos = async (
   baseData,
   ufSigla,
@@ -425,21 +484,22 @@ const atualizarEleitos = async (
   } catch (_) {}
 
   const jaExiste = json.abr.some((a) => a.cdabr === cdMunicipio);
-  if (jaExiste) {
-    await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
-    return;
+  if (jaExiste) return;
+
+  const candMap = new Map();
+  for (const [nrPartido, p] of partidos.entries()) {
+    for (const c of p.cand) {
+      candMap.set(c.sqcand, { sg: p.sg, nrFed: p.nrFed, nrPartido });
+    }
   }
 
   const candEleitos = eleitos.map((c) => {
-    const nrPartido = [...partidos.entries()].find(([, p]) =>
-      p.cand.some((x) => x.sqcand === c.sqcand)
-    )?.[0];
-
-    const partido = partidos.get(nrPartido);
+    const info = candMap.get(c.sqcand) || {};
+    const partido = partidos.get(info.nrPartido);
 
     let com = partido?.sg || null;
-    if (partido?.nrFed) {
-      const fed = federacoesMap.get(partido.nrFed);
+    if (info.nrFed) {
+      const fed = federacoesMap.get(info.nrFed);
       if (fed) com = fed.com || fed.sg || com;
     }
 
@@ -511,10 +571,7 @@ const atualizarAbrangencia = async (
   } catch (_) {}
 
   const jaExiste = json.abr.some((a) => a.cdabr === cdMunicipio);
-  if (jaExiste) {
-    await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
-    return;
-  }
+  if (jaExiste) return;
 
   const pctComp = percentual(comparecimento, totalAptos);
   const pctAbs = percentual(abstencao, totalAptos);
@@ -560,6 +617,12 @@ const atualizarAbrangencia = async (
   await fs.promises.writeFile(caminho, JSON.stringify(json), "utf8");
 };
 
+const CARGOS_BR = ["1", "01", "001", "0001"]; 
+
+const CARGOS_SUPORTADOS = [
+  "1", "3", "5", "6", "7", "8", "11", "13"
+];
+
 parentPort.on("message", async (workerData) => {
   const { detalhe, candidatos } = workerData;
 
@@ -583,7 +646,8 @@ parentPort.on("message", async (workerData) => {
     const nrZona = String(detalhe.NR_ZONA || detalhe.CD_ZONA || "0");
 
     const abrangencia = normalizarAbr(detalhe.TP_ABRANGENCIA);
-    const cdCargo = String(detalhe.CD_CARGO);
+    const cdCargo = String(detalhe.CD_CARGO).trim();
+    const cdCargoNorm = String(Number(cdCargo));
     const cdEleicaoArquivo = cdEleicao.padStart(6, "0");
 
     const baseData = path.join(
@@ -630,7 +694,6 @@ parentPort.on("message", async (workerData) => {
       const cand = candidatos[i];
       const sq = gerarSq(cand, detalhe);
       const votosCand = numero(cand.QT_VOTOS_NOMINAIS_VALIDOS);
-
       const existente = candidatosMap.get(sq);
 
       if (!existente) {
@@ -955,6 +1018,13 @@ parentPort.on("message", async (workerData) => {
       detalhe.DS_CARGO
     );
 
+    const candMap = new Map();
+    for (const [nrPartido, p] of partidos.entries()) {
+      for (const c of p.cand) {
+        candMap.set(c.sqcand, { sgp: p.sg, nrPartido, nmPartido: p.nm });
+      }
+    }
+
     const resumoMunicipio = {
       uf: ufSigla,
       cdCargo,
@@ -978,33 +1048,23 @@ parentPort.on("message", async (workerData) => {
         sni: numero(detalhe.QT_SECOES_NAO_INSTALADAS),
         esnt: numero(detalhe.QT_ELEITORES_SECOES_NAO_INSTALADAS),
       },
-      candidatos: todos.map((c) => ({
-        sq: c.sqcand,
-        n: c.n,
-        nm: c.nm,
-        nmu: c.nmu,
-        vap: Number(c.vap),
-        e: c.e,
-        st: c.st,
-        dvt: c.dvt,
-        vs: c.vs,
-        sgp:
-          partidos.get(
-            [...partidos.entries()].find(([, p]) =>
-              p.cand.some((x) => x.sqcand === c.sqcand)
-            )?.[0]
-          )?.sg || null,
-        nrPartido:
-          [...partidos.entries()].find(([, p]) =>
-            p.cand.some((x) => x.sqcand === c.sqcand)
-          )?.[0] || null,
-        nmPartido:
-          partidos.get(
-            [...partidos.entries()].find(([, p]) =>
-              p.cand.some((x) => x.sqcand === c.sqcand)
-            )?.[0]
-          )?.nm || null,
-      })),
+      candidatos: todos.map((c) => {
+        const info = candMap.get(c.sqcand) || {};
+        return {
+          sq: c.sqcand,
+          n: c.n,
+          nm: c.nm,
+          nmu: c.nmu,
+          vap: Number(c.vap),
+          e: c.e,
+          st: c.st,
+          dvt: c.dvt,
+          vs: c.vs,
+          sgp: info.sgp || null,
+          nrPartido: info.nrPartido || null,
+          nmPartido: info.nmPartido || null,
+        };
+      }),
     };
 
     const chaveTemp = `${ufSigla.toLowerCase()}-c${cdCargo.padStart(
@@ -1014,11 +1074,18 @@ parentPort.on("message", async (workerData) => {
     const caminhoTempUF = path.join(baseTmp, `${chaveTemp}-tmp-uf.json`);
     const caminhoTempBR = path.join(baseTmp, `${chaveTemp}-tmp-br.json`);
 
-    await acumularTemp(caminhoTempUF, resumoMunicipio);
+    await acumularTemp(baseTmp, caminhoTempUF, resumoMunicipio);
 
-    const cargosBR = ["1", "01", "0001"];
-    if (cargosBR.includes(cdCargo)) {
-      await acumularTemp(caminhoTempBR, resumoMunicipio);
+    logger.info(`[Worker] Temp UF gravado`, {
+      caminho: caminhoTempUF,
+      cargo: cdCargo,
+      cargoNorm: cdCargoNorm,
+      ehBR: CARGOS_BR.includes(cdCargoNorm),
+    });
+
+    if (CARGOS_BR.includes(cdCargoNorm)) {
+      await acumularTemp(baseTmp, caminhoTempBR, resumoMunicipio);
+      logger.info(`[Worker] Temp BR gravado`, { caminho: caminhoTempBR });
     }
 
     logger.info(`[Worker] Processamento concluído`, {
@@ -1040,7 +1107,7 @@ parentPort.on("message", async (workerData) => {
       },
       resumoEstado: resumoMunicipio,
       tempUF: caminhoTempUF,
-      tempBR: cargosBR.includes(cdCargo) ? caminhoTempBR : null,
+      tempBR: CARGOS_BR.includes(cdCargoNorm) ? caminhoTempBR : null,
     });
   } catch (erro) {
     logger.error(`[Worker] Erro processamento cidade`, {
@@ -1059,6 +1126,7 @@ parentPort.on("message", async (workerData) => {
         uf: ufSigla,
         cargo: detalhe?.CD_CARGO,
         turno: detalhe?.NR_TURNO,
+        contexto: "processamentoArquivo",
       },
       erro
     );
